@@ -1,0 +1,11 @@
+# Derived from the LLVM style, lightly tuned for this project.
+---
+BasedOnStyle: LLVM
+Standard: Latest
+ColumnLimit: 100
+PointerAlignment: Left
+ReferenceAlignment: Left
+IncludeBlocks: Regroup
+AllowShortFunctionsOnASingleLine: Inline
+SpaceAfterTemplateKeyword: false
+...

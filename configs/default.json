@@ -1,0 +1,14 @@
+{
+  "lob_bin": "market_data/lob.bin",
+  "trades_bin": "market_data/trades.bin",
+  "report_csv": "report.csv",
+
+  "fee_bps": 1.0,
+  "feed_latency_us": 0,
+  "order_latency_us": 1000,
+
+  "half_spread": 1,
+  "order_qty": 1000,
+  "max_inventory": 100000,
+  "queue_model": "optimistic"
+}
