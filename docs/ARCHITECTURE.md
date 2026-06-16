@@ -138,14 +138,23 @@ event-time clock, replays are reproducible bit-for-bit.
 
 Two consecutive runs produce byte-identical `report.csv` (determinism check).
 
+## Strategies
+
+The three strategies and their calibration are documented in
+**[STRATEGY.md](STRATEGY.md)** (models, performance results, roadmap). In brief:
+
+- **Avellaneda–Stoikov (2008)** *(done)* — `AvellanedaStoikov : Strategy`, reservation
+  price `r = s − q·γ·σ²·(T−t)` and half-spread `δ = ½γσ²(T−t) + (1/γ)ln(1+γ/k)`, with
+  `σ` and `k` calibrated **online** from the data (`calibration.hpp`).
+- **Micro-price (2018)** *(done)* — `MicropriceAS : AvellanedaStoikov` centres the quotes
+  on the full Stoikov micro-price `M + g(I,S)`, where `g` is fitted from a finite-state
+  Markov chain over the LOB (`MicropriceModel`, one-pass calibration).
+
 ## Roadmap
 
-- **Avellaneda–Stoikov (2008)** — reservation price `r = s − q·γ·σ²·(T−t)` and optimal
-  half-spread `δ = ½γσ²(T−t) + (1/γ)ln(1+γ/k)`; a new `AvellanedaStoikov : Strategy`,
-  calibrating `σ` and `k` from the data.
-- **Microprice (2018)** — replace mid `s` with the full Stoikov microprice estimator in
-  `OrderBook::microprice()`; a `MicropriceAS : Strategy`.
 - **Performance report** — equity curve, drawdown, Sharpe, fill ratio, inventory
   distribution (time-series export from `Metrics`).
+- **Strategy** — full finite-horizon `θ`-PDE (asymmetric δ), multi-level/sized quoting,
+  joint γ/σ/k auto-tuning, richer micro-price state with online re-fit.
 - **Execution refinements** — feed latency, cancel latency, multi-level queue accounting,
   adverse-selection / market-impact models, fee tiers.

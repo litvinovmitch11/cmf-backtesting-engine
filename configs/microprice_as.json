@@ -1,0 +1,21 @@
+{
+  "lob_bin": "market_data/lob.bin",
+  "trades_bin": "market_data/trades.bin",
+  "report_csv": "reports/microprice_as.csv",
+
+  "fee_bps": 1.0,
+  "feed_latency_us": 0,
+  "order_latency_us": 1000,
+
+  "order_qty": 1000,
+  "max_inventory": 100000,
+  "queue_model": "optimistic",
+
+  "strategy": "microprice_as",
+  "as_gamma": 500,
+  "as_horizon_s": 300.0,
+  "as_min_half_spread": 1,
+  "as_vol_alpha": 0.001,
+  "as_k_alpha": 0.001,
+  "as_k_seed_ticks": 2.0
+}

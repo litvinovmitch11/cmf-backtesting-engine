@@ -25,6 +25,18 @@ Config Config::load(const std::string& path) {
   c.order_qty = j.value("order_qty", c.order_qty);
   c.max_inventory = j.value("max_inventory", c.max_inventory);
   c.queue_model = j.value("queue_model", c.queue_model);
+
+  c.strategy = j.value("strategy", c.strategy);
+  c.as_gamma = j.value("as_gamma", c.as_gamma);
+  c.as_sigma = j.value("as_sigma", c.as_sigma);
+  c.as_k = j.value("as_k", c.as_k);
+  c.as_horizon_s = j.value("as_horizon_s", c.as_horizon_s);
+  c.as_min_half_spread = j.value("as_min_half_spread", c.as_min_half_spread);
+  c.as_vol_alpha = j.value("as_vol_alpha", c.as_vol_alpha);
+  c.as_k_alpha = j.value("as_k_alpha", c.as_k_alpha);
+  c.as_k_seed_ticks = j.value("as_k_seed_ticks", c.as_k_seed_ticks);
+  c.mp_imbalance_bins = j.value("mp_imbalance_bins", c.mp_imbalance_bins);
+  c.mp_spread_bins = j.value("mp_spread_bins", c.mp_spread_bins);
   return c;
 }
 

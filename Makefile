@@ -7,7 +7,7 @@ CONFIG ?= configs/default.json
 SOURCES := $(shell find include src apps tests -type f \( -name '*.hpp' -o -name '*.cpp' \))
 TU      := $(shell find src apps -type f -name '*.cpp')
 
-.PHONY: all configure build test run convert sample format tidy tidy-fix clean help
+.PHONY: all configure build test run convert sample experiments format tidy tidy-fix clean help
 
 all: build
 
@@ -26,6 +26,12 @@ convert: build ## Convert the sample CSVs to packed binary (one-time)
 
 run: build ## Run a backtest (override with CONFIG=path/to.json)
 	$(BUILD)/backtest $(CONFIG)
+
+experiments: build ## Run fixed / A-S / micro-price-A-S on the full data (-> reports/)
+	@mkdir -p reports
+	$(BUILD)/backtest configs/fixed.json
+	$(BUILD)/backtest configs/as.json
+	$(BUILD)/backtest configs/microprice_as.json
 
 sample: build ## Convert the bundled sample data and backtest it (no large data needed)
 	$(BUILD)/convert_csv lob    market_data/lob_sample.csv    market_data/lob_sample.bin

@@ -5,11 +5,14 @@ It replays historical L2 order-book snapshots and trade prints, simulates limit-
 placement/cancellation with **queue-position-aware** execution, and reports PnL, inventory,
 and turnover.
 
-> **Status: skeleton.** Data pipeline, order book, queue-aware execution simulator, a
-> constant-spread quoter (pipeline stand-in), and PnL/inventory/turnover metrics — all
-> unit-tested and validated end-to-end on the sample data (~23M events replay in <1 s).
-> Avellaneda–Stoikov (2008), the microprice (2018) extension, and the full performance
-> report are next — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#roadmap).
+> **Status: strategies implemented.** Data pipeline, order book, queue-aware execution
+> simulator, PnL/inventory/turnover metrics, and three strategies — a constant-spread
+> quoter (pipeline stand-in), **Avellaneda–Stoikov (2008)**, and **A-S + the Stoikov
+> (2018) micro-price** — all unit-tested (25 tests) and validated end-to-end on the
+> sample data (~23M events replay in <1 s). σ and k are calibrated online from the data;
+> the micro-price is fitted from a finite-state Markov chain. See
+> **[docs/STRATEGY.md](docs/STRATEGY.md)** for the model descriptions, performance
+> results, and improvement roadmap.
 
 ## Prerequisites
 
@@ -53,7 +56,7 @@ events=22901679 book=1036690 trades=21864989 fills=764349 | inv=-88008 turnover=
 
 ### Bundled sample (no large data needed)
 
-A tiny real-format sample ships in the repo (`market_data/sample_*.csv`), so the project is
+A tiny real-format sample ships in the repo (`market_data/*_sample.csv`), so the project is
 runnable out of the box:
 
 ```bash
@@ -76,6 +79,26 @@ use `configs/default.json`.
 | `order_qty` | size per quote |
 | `max_inventory` | hard position cap |
 | `queue_model` | `optimistic` or `proportional` |
+| `strategy` | `fixed` (stand-in), `as` (Avellaneda–Stoikov), or `microprice_as` |
+| `as_gamma` | risk aversion (tune per instrument — see [STRATEGY.md](docs/STRATEGY.md#1-avellanedastoikov-2008)) |
+| `as_horizon_s` | rolling session length `T` (seconds) for the `(T−t)` term |
+| `as_sigma` / `as_k` | fix volatility / arrival-decay instead of calibrating online (≤0 ⇒ online) |
+| `mp_imbalance_bins` / `mp_spread_bins` | micro-price Markov-chain state granularity |
+
+## Strategies
+
+Three strategies plug into one `Strategy` interface (selected via `strategy`):
+`fixed` (constant-spread stand-in), `as` (Avellaneda–Stoikov 2008), and
+`microprice_as` (A-S centred on the Stoikov 2018 micro-price). σ and k are
+calibrated online; the micro-price is fitted from a one-pass Markov chain over the
+LOB. Run the three on the full data and reproduce the report with:
+
+```bash
+make experiments     # -> reports/{fixed,as,microprice_as}.csv
+```
+
+See **[docs/STRATEGY.md](docs/STRATEGY.md)** for the models, calibration,
+performance tables, and roadmap. Pre-made configs: `configs/{fixed,as,microprice_as}.json`.
 
 ## Project layout
 

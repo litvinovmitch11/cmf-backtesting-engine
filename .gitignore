@@ -1,6 +1,6 @@
 .vscode/
 build/
-# Full/real data and all generated binaries stay local; market_data/sample_*.csv are committed.
+# Full/real data and all generated binaries stay local; market_data/*_sample.csv are committed.
 market_data/lob.csv
 market_data/trades.csv
 market_data/*.bin

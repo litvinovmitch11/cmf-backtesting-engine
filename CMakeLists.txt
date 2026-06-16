@@ -44,6 +44,8 @@ add_library(bt STATIC
   src/bt/data/feed_merger.cpp
   src/bt/exec/execution_simulator.cpp
   src/bt/strategy/fixed_spread_quoter.cpp
+  src/bt/strategy/avellaneda_stoikov.cpp
+  src/bt/strategy/microprice.cpp
   src/bt/metrics/pnl_tracker.cpp
   src/bt/engine/backtest_engine.cpp
   src/bt/engine/config.cpp)
@@ -67,7 +69,8 @@ target_link_libraries(backtest PRIVATE bt)
 # ---------------------------------------------------------------------------
 enable_testing()
 add_executable(bt_tests tests/test_core.cpp tests/test_data.cpp tests/test_book.cpp
-                        tests/test_exec.cpp tests/test_strategy.cpp tests/test_engine.cpp)
+                        tests/test_exec.cpp tests/test_strategy.cpp tests/test_engine.cpp
+                        tests/test_avellaneda.cpp)
 target_link_libraries(bt_tests PRIVATE bt Catch2::Catch2WithMain)
 
 include(CTest)
