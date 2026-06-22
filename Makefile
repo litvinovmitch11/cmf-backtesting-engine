@@ -7,7 +7,7 @@ CONFIG ?= configs/default.json
 SOURCES := $(shell find include src apps tests -type f \( -name '*.hpp' -o -name '*.cpp' \))
 TU      := $(shell find src apps -type f -name '*.cpp')
 
-.PHONY: all configure build test run convert sample experiments format tidy tidy-fix clean help
+.PHONY: all configure build test run convert sample experiments sweep format tidy tidy-fix clean help
 
 all: build
 
@@ -32,6 +32,9 @@ experiments: build ## Run fixed / A-S / micro-price-A-S on the full data (-> rep
 	$(BUILD)/backtest configs/fixed.json
 	$(BUILD)/backtest configs/as.json
 	$(BUILD)/backtest configs/microprice_as.json
+
+sweep: build ## Run the gamma risk-aversion sweep on the full data (-> reports/gamma_sweep.csv)
+	BUILD=$(BUILD) ./scripts/gamma_sweep.sh
 
 sample: build ## Convert the bundled sample data and backtest it (no large data needed)
 	$(BUILD)/convert_csv lob    market_data/lob_sample.csv    market_data/lob_sample.bin

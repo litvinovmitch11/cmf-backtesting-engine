@@ -166,15 +166,45 @@ void MicropriceModel::fit() {
 double MicropriceModel::adjustment(double imbalance, Ticks spread) const {
   if (!fitted_ || nm_ == 0)
     return 0.0;
+  // Spreads wider than the modeled set carry no information in the paper's state
+  // space (see Fig. 5, spread=4: adjustment ~ 0) -> fall back to the mid.
+  if (spread < 1 || spread > cfg_.n_spread)
+    return 0.0;
   return g_star_[state(imbalance, spread)];
 }
 
 MicropriceModel MicropriceModel::calibrate(EventSource& lob, Config cfg) {
   MicropriceModel m(cfg);
+
+  // Only spreads 1..n_spread ticks are part of the paper's state space; a
+  // transition is recorded only when both endpoints are in range (Section 4).
+  const auto in_range = [&](Ticks s) noexcept { return s >= 1 && s <= cfg.n_spread; };
+
+  // Previous emitted sample (the chain's prior grid point).
   bool have_prev = false;
   double prev_imb = 0.0;
   Ticks prev_spread = 0;
   Ticks prev_mid2 = 0; // 2*mid in ticks (exact; mid moves <=> this changes)
+
+  const auto emit = [&](double imb, Ticks spread, Ticks mid2) {
+    if (have_prev && in_range(spread) && in_range(prev_spread)) {
+      const bool moved = (mid2 != prev_mid2);
+      const double dM = to_price(mid2 - prev_mid2) * 0.5;
+      m.add_transition(prev_imb, prev_spread, imb, spread, dM, moved);
+    }
+    prev_imb = imb;
+    prev_spread = spread;
+    prev_mid2 = mid2;
+    have_prev = true;
+  };
+
+  // Most recent book state, forward-filled onto the sampling grid.
+  bool have_cur = false;
+  double cur_imb = 0.5;
+  Ticks cur_spread = 0;
+  Ticks cur_mid2 = 0;
+  Ts grid = 0;
+  bool grid_init = false;
 
   while (lob.has_next()) {
     const MarketEvent ev = lob.next();
@@ -192,16 +222,27 @@ MicropriceModel MicropriceModel::calibrate(EventSource& lob, Config cfg) {
     const double imb = (denom > 0.0) ? (qb / denom) : 0.5;
     const Ticks spread = ask - bid;
     const Ticks mid2 = bid + ask;
+    const Ts ts = bu->ts;
 
-    if (have_prev) {
-      const bool moved = (mid2 != prev_mid2);
-      const double dM = to_price(mid2 - prev_mid2) * 0.5;
-      m.add_transition(prev_imb, prev_spread, imb, spread, dM, moved);
+    if (cfg.sample_dt_us <= 0) {
+      emit(imb, spread, mid2); // legacy: one transition per book update (event time)
+      continue;
     }
-    prev_imb = imb;
-    prev_spread = spread;
-    prev_mid2 = mid2;
-    have_prev = true;
+
+    // Fixed-grid discrete-time chain (paper Section 4): emit the book state in
+    // effect at each grid point we have passed, then advance the current state.
+    if (!grid_init) {
+      grid = ts;
+      grid_init = true;
+    }
+    while (have_cur && ts >= grid) {
+      emit(cur_imb, cur_spread, cur_mid2);
+      grid += cfg.sample_dt_us;
+    }
+    cur_imb = imb;
+    cur_spread = spread;
+    cur_mid2 = mid2;
+    have_cur = true;
   }
   m.fit();
   return m;

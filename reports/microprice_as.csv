@@ -2,10 +2,10 @@ metric,value
 events,22901679
 book_updates,1036690
 trades,21864989
-fills,248444
-inventory,-52
-turnover,1.87723e+06
-fees,187.723
-realized_cash,-379.14
+fills,173841
+inventory,909931
+turnover,1.27442e+06
+fees,127.442
+realized_cash,-5844.64
 mark_price,0.00773575
-equity_pnl,-379.542
+equity_pnl,1194.36

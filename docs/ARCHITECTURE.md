@@ -145,7 +145,9 @@ The three strategies and their calibration are documented in
 
 - **Avellaneda–Stoikov (2008)** *(done)* — `AvellanedaStoikov : Strategy`, reservation
   price `r = s − q·γ·σ²·(T−t)` and half-spread `δ = ½γσ²(T−t) + (1/γ)ln(1+γ/k)`, with
-  `σ` and `k` calibrated **online** from the data (`calibration.hpp`).
+  constant `σ` and `k` calibrated **offline in one pass** from the data
+  (`AvellanedaStoikov::calibrate`). Single finite horizon, no inventory cap — faithful
+  to the paper (see [STRATEGY.md](STRATEGY.md)).
 - **Micro-price (2018)** *(done)* — `MicropriceAS : AvellanedaStoikov` centres the quotes
   on the full Stoikov micro-price `M + g(I,S)`, where `g` is fitted from a finite-state
   Markov chain over the LOB (`MicropriceModel`, one-pass calibration).

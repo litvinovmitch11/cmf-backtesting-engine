@@ -35,29 +35,43 @@ int main(int argc, char** argv) {
                                 bt::LatencyModel{cfg.feed_latency_us, cfg.order_latency_us});
 
     // --- Strategy selection -------------------------------------------------
-    const bt::AvellanedaStoikovParams as_params{
-        .gamma = cfg.as_gamma,
-        .sigma = cfg.as_sigma,
-        .k = cfg.as_k,
-        .horizon_us = static_cast<bt::Ts>(cfg.as_horizon_s * 1e6),
-        .order_qty = cfg.order_qty,
-        .max_inventory = cfg.max_inventory,
-        .min_half_spread = cfg.as_min_half_spread,
-        .vol_alpha = cfg.as_vol_alpha,
-        .k_alpha = cfg.as_k_alpha,
-        .k_seed_ticks = cfg.as_k_seed_ticks,
+    // Faithful A-S needs constant sigma/k; calibrate them once offline from the
+    // data (the paper's calibration step) when not pinned in the config.
+    auto as_params = [&]() {
+      bt::AvellanedaStoikovParams p{
+          .gamma = cfg.as_gamma,
+          .sigma = cfg.as_sigma,
+          .k = cfg.as_k,
+          .horizon_us = static_cast<bt::Ts>(cfg.as_horizon_s * 1e6),
+          .order_qty = cfg.order_qty,
+      };
+      if (p.sigma <= 0.0 || p.k <= 0.0) {
+        bt::FeedMerger cal;
+        cal.add_source(std::make_unique<bt::LobBinSource>(cfg.lob_bin));
+        cal.add_source(std::make_unique<bt::TradesBinSource>(cfg.trades_bin));
+        const bt::ASConstants c = bt::AvellanedaStoikov::calibrate(cal);
+        if (p.sigma <= 0.0)
+          p.sigma = c.sigma;
+        if (p.k <= 0.0)
+          p.k = c.k;
+        std::fprintf(stderr, "a-s: calibrated sigma=%.6g k=%.6g\n", p.sigma, p.k);
+      }
+      return p;
     };
 
     std::unique_ptr<bt::Strategy> strat;
     if (cfg.strategy == "as") {
-      strat = std::make_unique<bt::AvellanedaStoikov>(as_params);
+      strat = std::make_unique<bt::AvellanedaStoikov>(as_params());
     } else if (cfg.strategy == "microprice_as") {
+      const bt::AvellanedaStoikovParams p = as_params();
       // One-shot calibration pass over the LOB to fit the Stoikov micro-price.
       bt::LobBinSource cal_lob(cfg.lob_bin);
       bt::MicropriceModel model = bt::MicropriceModel::calibrate(
-          cal_lob, {.n_imbalance = cfg.mp_imbalance_bins, .n_spread = cfg.mp_spread_bins});
+          cal_lob, {.n_imbalance = cfg.mp_imbalance_bins,
+                    .n_spread = cfg.mp_spread_bins,
+                    .sample_dt_us = cfg.mp_sample_dt_us});
       std::fprintf(stderr, "microprice: calibrated on %zu transitions\n", model.samples());
-      strat = std::make_unique<bt::MicropriceAS>(as_params, std::move(model));
+      strat = std::make_unique<bt::MicropriceAS>(p, std::move(model));
     } else {
       strat = std::make_unique<bt::FixedSpreadQuoter>(
           bt::QuoterParams{cfg.half_spread, cfg.order_qty, cfg.max_inventory});

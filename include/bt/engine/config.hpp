@@ -27,18 +27,15 @@ struct Config {
   std::string strategy{"fixed"};
 
   // Avellaneda-Stoikov parameters (used by "as" / "microprice_as").
-  double as_gamma{0.3};        // risk aversion (per lot)
-  double as_sigma{0.0};        // fixed vol (price/sqrt-s); <=0 => estimate online
-  double as_k{0.0};            // fixed arrival decay (1/price); <=0 => estimate online
-  double as_horizon_s{60.0};   // rolling session length T (seconds)
-  Ticks as_min_half_spread{1}; // floor on each quote's offset from reservation (ticks)
-  double as_vol_alpha{1e-3};   // EWMA smoothing for the volatility estimator
-  double as_k_alpha{1e-3};     // EWMA smoothing for the arrival-rate estimator
-  double as_k_seed_ticks{2.0}; // initial mean trade distance (ticks) before trades arrive
+  double as_gamma{0.5};      // risk aversion gamma
+  double as_sigma{0.0};      // constant vol (price/sqrt-s); <=0 => calibrate offline
+  double as_k{0.0};          // constant arrival decay (1/price); <=0 => calibrate offline
+  double as_horizon_s{60.0}; // finite horizon T (seconds), single-shot from the first event
 
   // Microprice calibration (used by "microprice_as").
   int mp_imbalance_bins{10};
   int mp_spread_bins{4};
+  Ts mp_sample_dt_us{1'000'000}; // discrete-time chain grid (paper ~1s); 0 => event-time
 
   // Load overrides from a JSON file (missing keys keep their default). Throws
   // std::exception on open/parse failure.

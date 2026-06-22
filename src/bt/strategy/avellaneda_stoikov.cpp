@@ -1,106 +1,110 @@
 #include "bt/strategy/avellaneda_stoikov.hpp"
 
 #include "bt/book/order_book.hpp"
+#include "bt/core/event.hpp"
+#include "bt/data/event_source.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <variant>
 
 namespace bt {
 namespace {
 constexpr Qty kEps = 1e-9;
 } // namespace
 
-AvellanedaStoikov::AvellanedaStoikov(AvellanedaStoikovParams params)
-    : p_(params), vol_(params.vol_alpha),
-      arr_(params.k_seed_ticks * to_price(1), params.k_alpha, to_price(1) * 0.5) {}
+ASConstants AvellanedaStoikov::calibrate(EventSource& feed) {
+  double sum_d2 = 0.0; // sum of dMid^2
+  double sum_dt = 0.0; // sum of dt (seconds)
+  double sum_dist = 0.0;
+  long long n_trades = 0;
+
+  bool have_mid = false;
+  double last_mid = 0.0;
+  Ts last_ts = 0;
+
+  while (feed.has_next()) {
+    const MarketEvent ev = feed.next();
+    if (const auto* bu = std::get_if<BookUpdate>(&ev)) {
+      const BookSnapshot& s = bu->book;
+      if (s.depth == 0 || s.bids == nullptr || s.asks == nullptr)
+        continue;
+      const double mid = 0.5 * (to_price(s.bids[0].px) + to_price(s.asks[0].px));
+      if (have_mid) {
+        const double dt = static_cast<double>(bu->ts - last_ts) * 1e-6;
+        if (dt > 0.0) {
+          const double d = mid - last_mid;
+          sum_d2 += d * d;
+          sum_dt += dt;
+        }
+      }
+      last_mid = mid;
+      last_ts = bu->ts;
+      have_mid = true;
+    } else if (const auto* tp = std::get_if<TradePrint>(&ev)) {
+      if (have_mid) {
+        sum_dist += std::abs(to_price(tp->price) - last_mid);
+        ++n_trades;
+      }
+    }
+  }
+
+  ASConstants c;
+  c.sigma = (sum_dt > 0.0) ? std::sqrt(sum_d2 / sum_dt) : 0.0;
+  const double mean_dist = (n_trades > 0) ? (sum_dist / static_cast<double>(n_trades)) : 0.0;
+  c.k = (mean_dist > 0.0) ? (1.0 / mean_dist) : 0.0;
+  return c;
+}
 
 double AvellanedaStoikov::center_price(const OrderBook& book) const {
   return book.mid();
 }
 
-double AvellanedaStoikov::time_to_horizon(Ts now) noexcept {
-  if (!session_started_) {
-    session_start_ = now;
-    session_started_ = true;
-  }
-  double remaining_s = static_cast<double>(p_.horizon_us - (now - session_start_)) * 1e-6;
-  if (remaining_s <= 0.0) {
-    session_start_ = now; // roll into a fresh session
-    remaining_s = static_cast<double>(p_.horizon_us) * 1e-6;
-  }
-  return remaining_s;
-}
-
 void AvellanedaStoikov::on_book(const OrderBook& book, Ts now, OrderApi& api) {
   if (!book.valid())
     return;
-  vol_.update(book.mid(), now);
-  requote(book, now, api);
-}
 
-void AvellanedaStoikov::on_trade(const TradePrint& trade, const OrderBook& book, Ts /*now*/,
-                                 OrderApi& /*api*/) {
-  if (!book.valid())
-    return;
-  // Distance the market order reached from the mid -> feeds the k estimator.
-  arr_.update(std::abs(to_price(trade.price) - book.mid()));
-}
+  // Single finite horizon: t runs from the first event to T, then (T - t) stays
+  // at 0 (the paper's terminal time). No rolling reset.
+  if (!started_) {
+    t0_ = now;
+    started_ = true;
+  }
+  const double tau =
+      std::max(0.0, static_cast<double>(p_.horizon_us - (now - t0_)) * 1e-6); // (T - t)
 
-void AvellanedaStoikov::requote(const OrderBook& book, Ts now, OrderApi& api) {
-  const double tau = time_to_horizon(now);
-  const double sigma2 = (p_.sigma > 0.0) ? (p_.sigma * p_.sigma) : vol_.sigma2_per_sec();
-  const double k = (p_.k > 0.0) ? p_.k : arr_.k();
+  const double center = center_price(book);   // mid (or micro-price in MicropriceAS)
+  const double sigma2 = p_.sigma * p_.sigma;  // CONSTANT variance per second
   const double q = inventory_ / p_.order_qty; // signed inventory in lots
 
-  const double center = center_price(book);
-  const double risk = q * p_.gamma * sigma2 * tau; // inventory skew
-  const double reservation = center - risk;        // r = s - q*gamma*sigma^2*(T-t)
-  double half = 0.5 * p_.gamma * sigma2 * tau;     // first (inventory/vol) term
-  if (k > 0.0 && p_.gamma > 0.0)
-    half += (1.0 / p_.gamma) * std::log1p(p_.gamma / k); // (1/gamma)*ln(1+gamma/k)
+  // Reservation price (paper eq. 3.8) and optimal symmetric half-spread (3.10-3.12).
+  const double reservation = center - q * p_.gamma * sigma2 * tau;
+  double half = 0.5 * p_.gamma * sigma2 * tau;
+  if (p_.k > 0.0 && p_.gamma > 0.0)
+    half += (1.0 / p_.gamma) * std::log1p(p_.gamma / p_.k);
 
   last_reservation_ = reservation;
   last_half_spread_ = half;
 
-  const double min_half = to_price(p_.min_half_spread);
-  half = std::max(half, min_half);
+  // Continuous prices in the paper; the venue is tick-discrete, so round. This is
+  // the only deviation from the paper — no min-spread floor, no forced widening.
+  const Ticks target_bid = to_ticks(reservation - half);
+  const Ticks target_ask = to_ticks(reservation + half);
 
-  Ticks target_bid = to_ticks(reservation - half);
-  Ticks target_ask = to_ticks(reservation + half);
-  // Guarantee a strictly positive spread of at least the configured floor.
-  if (target_ask - target_bid < 2 * p_.min_half_spread) {
-    const Ticks center_tick = to_ticks(reservation);
-    target_bid = center_tick - p_.min_half_spread;
-    target_ask = center_tick + p_.min_half_spread;
+  // No inventory cap: both sides are always quoted (the utility controls inventory).
+  if (bid_id_ == kInvalidOrderId || target_bid != bid_px_) {
+    if (bid_id_ != kInvalidOrderId)
+      api.cancel(bid_id_);
+    bid_id_ = api.place(Side::Buy, target_bid, p_.order_qty);
+    bid_px_ = target_bid;
+    bid_filled_ = 0;
   }
-
-  const bool want_bid = inventory_ < p_.max_inventory - kEps;  // room to buy
-  const bool want_ask = inventory_ > -p_.max_inventory + kEps; // room to sell
-
-  if (want_bid) {
-    if (bid_id_ == kInvalidOrderId || target_bid != bid_px_) {
-      if (bid_id_ != kInvalidOrderId)
-        api.cancel(bid_id_);
-      bid_id_ = api.place(Side::Buy, target_bid, p_.order_qty);
-      bid_px_ = target_bid;
-      bid_filled_ = 0;
-    }
-  } else if (bid_id_ != kInvalidOrderId) {
-    api.cancel(bid_id_);
-    bid_id_ = kInvalidOrderId;
-  }
-
-  if (want_ask) {
-    if (ask_id_ == kInvalidOrderId || target_ask != ask_px_) {
-      if (ask_id_ != kInvalidOrderId)
-        api.cancel(ask_id_);
-      ask_id_ = api.place(Side::Sell, target_ask, p_.order_qty);
-      ask_px_ = target_ask;
-      ask_filled_ = 0;
-    }
-  } else if (ask_id_ != kInvalidOrderId) {
-    api.cancel(ask_id_);
-    ask_id_ = kInvalidOrderId;
+  if (ask_id_ == kInvalidOrderId || target_ask != ask_px_) {
+    if (ask_id_ != kInvalidOrderId)
+      api.cancel(ask_id_);
+    ask_id_ = api.place(Side::Sell, target_ask, p_.order_qty);
+    ask_px_ = target_ask;
+    ask_filled_ = 0;
   }
 }
 
@@ -110,7 +114,7 @@ void AvellanedaStoikov::on_fill(const Fill& fill) {
   if (fill.order_id == bid_id_) {
     bid_filled_ += fill.qty;
     if (bid_filled_ >= p_.order_qty - kEps) {
-      bid_id_ = kInvalidOrderId; // fully filled -> requote next book update
+      bid_id_ = kInvalidOrderId;
       bid_filled_ = 0;
     }
   } else if (fill.order_id == ask_id_) {

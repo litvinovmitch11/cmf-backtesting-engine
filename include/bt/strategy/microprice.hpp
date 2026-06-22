@@ -31,7 +31,12 @@ class MicropriceModel {
 public:
   struct Config {
     int n_imbalance{10}; // imbalance buckets in [0,1)
-    int n_spread{4};     // spread buckets: 1..n_spread ticks (capped)
+    int n_spread{4};     // spread states: 1..n_spread ticks; wider spreads are out-of-model
+    // Sampling clock for the discrete-time Markov chain. The paper rounds the
+    // timestamp to a fixed grid ("time step is now discrete, t in Z+", ~1s);
+    // transitions are taken between consecutive grid points (forward-filled).
+    // 0 => legacy event-time stepping (one transition per book update).
+    Ts sample_dt_us{1'000'000};
   };
 
   MicropriceModel();                    // default Config

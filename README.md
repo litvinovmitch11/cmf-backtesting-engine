@@ -8,9 +8,10 @@ and turnover.
 > **Status: strategies implemented.** Data pipeline, order book, queue-aware execution
 > simulator, PnL/inventory/turnover metrics, and three strategies — a constant-spread
 > quoter (pipeline stand-in), **Avellaneda–Stoikov (2008)**, and **A-S + the Stoikov
-> (2018) micro-price** — all unit-tested (25 tests) and validated end-to-end on the
-> sample data (~23M events replay in <1 s). σ and k are calibrated online from the data;
-> the micro-price is fitted from a finite-state Markov chain. See
+> (2018) micro-price** — all unit-tested (29 tests) and validated end-to-end on the
+> sample data (~23M events replay in <1 s). σ and k are calibrated offline in a single
+> pass and held constant (paper-faithful); the micro-price is fitted from a
+> finite-state Markov chain. See
 > **[docs/STRATEGY.md](docs/STRATEGY.md)** for the model descriptions, performance
 > results, and improvement roadmap.
 
@@ -82,7 +83,7 @@ use `configs/default.json`.
 | `strategy` | `fixed` (stand-in), `as` (Avellaneda–Stoikov), or `microprice_as` |
 | `as_gamma` | risk aversion (tune per instrument — see [STRATEGY.md](docs/STRATEGY.md#1-avellanedastoikov-2008)) |
 | `as_horizon_s` | rolling session length `T` (seconds) for the `(T−t)` term |
-| `as_sigma` / `as_k` | fix volatility / arrival-decay instead of calibrating online (≤0 ⇒ online) |
+| `as_sigma` / `as_k` | pin volatility / arrival-decay instead of calibrating offline (≤0 ⇒ calibrate offline) |
 | `mp_imbalance_bins` / `mp_spread_bins` | micro-price Markov-chain state granularity |
 
 ## Strategies
@@ -90,11 +91,13 @@ use `configs/default.json`.
 Three strategies plug into one `Strategy` interface (selected via `strategy`):
 `fixed` (constant-spread stand-in), `as` (Avellaneda–Stoikov 2008), and
 `microprice_as` (A-S centred on the Stoikov 2018 micro-price). σ and k are
-calibrated online; the micro-price is fitted from a one-pass Markov chain over the
-LOB. Run the three on the full data and reproduce the report with:
+calibrated offline in one pass and held constant; the micro-price is fitted from a
+one-pass Markov chain over the LOB. Run the three on the full data and reproduce the
+report with:
 
 ```bash
 make experiments     # -> reports/{fixed,as,microprice_as}.csv
+make sweep           # risk-aversion (gamma) sweep -> reports/gamma_sweep.csv
 ```
 
 See **[docs/STRATEGY.md](docs/STRATEGY.md)** for the models, calibration,
