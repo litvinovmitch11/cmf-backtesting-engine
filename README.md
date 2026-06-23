@@ -6,12 +6,14 @@ placement/cancellation with **queue-position-aware** execution, and reports PnL,
 and turnover.
 
 > **Status: strategies implemented.** Data pipeline, order book, queue-aware execution
-> simulator, PnL/inventory/turnover metrics, and three strategies — a constant-spread
-> quoter (pipeline stand-in), **Avellaneda–Stoikov (2008)**, and **A-S + the Stoikov
-> (2018) micro-price** — all unit-tested (29 tests) and validated end-to-end on the
-> sample data (~23M events replay in <1 s). σ and k are calibrated offline in a single
-> pass and held constant (paper-faithful); the micro-price is fitted from a
-> finite-state Markov chain. See
+> simulator, PnL/inventory/turnover metrics, and four strategies — a constant-spread
+> quoter (pipeline stand-in), the paper-faithful **Avellaneda–Stoikov (2008)** and
+> **A-S + the Stoikov (2018) micro-price**, and a deployable **online A-S** (rolling
+> horizon + online σ/k + inventory cap) that holds inventory near flat — all
+> unit-tested (32 tests) and validated end-to-end on the sample data (~23M events
+> replay in <1 s). For the faithful strategies σ and k are calibrated offline in a
+> single pass and held constant; the online variant re-estimates them continuously;
+> the micro-price is fitted from a finite-state Markov chain. See
 > **[docs/STRATEGY.md](docs/STRATEGY.md)** for the model descriptions, performance
 > results, and improvement roadmap.
 
@@ -80,25 +82,33 @@ use `configs/default.json`.
 | `order_qty` | size per quote |
 | `max_inventory` | hard position cap |
 | `queue_model` | `optimistic` or `proportional` |
-| `strategy` | `fixed` (stand-in), `as` (Avellaneda–Stoikov), or `microprice_as` |
+| `strategy` | `fixed` (stand-in), `as` (faithful A-S), `microprice_as` (A-S + micro-price), or `as_online` (deployable A-S) |
 | `as_gamma` | risk aversion (tune per instrument — see [STRATEGY.md](docs/STRATEGY.md#1-avellanedastoikov-2008)) |
-| `as_horizon_s` | rolling session length `T` (seconds) for the `(T−t)` term |
+| `as_horizon_s` | horizon `T` (seconds): single-shot for `as`/`microprice_as`, rolling session for `as_online` |
 | `as_sigma` / `as_k` | pin volatility / arrival-decay instead of calibrating offline (≤0 ⇒ calibrate offline) |
+| `as_vol_alpha` / `as_k_alpha` | EWMA weights for the `as_online` online σ/k estimators |
+| `as_min_half_spread` | `as_online` half-spread floor, in ticks |
 | `mp_imbalance_bins` / `mp_spread_bins` | micro-price Markov-chain state granularity |
 
 ## Strategies
 
-Three strategies plug into one `Strategy` interface (selected via `strategy`):
-`fixed` (constant-spread stand-in), `as` (Avellaneda–Stoikov 2008), and
-`microprice_as` (A-S centred on the Stoikov 2018 micro-price). σ and k are
-calibrated offline in one pass and held constant; the micro-price is fitted from a
-one-pass Markov chain over the LOB. Run the three on the full data and reproduce the
-report with:
+Four strategies plug into one `Strategy` interface (selected via `strategy`):
+`fixed` (constant-spread stand-in), `as` (paper-faithful Avellaneda–Stoikov 2008),
+`microprice_as` (A-S centred on the Stoikov 2018 micro-price), and `as_online` (the
+deployable A-S: rolling horizon + online σ/k + inventory cap, holding inventory near
+flat). For the faithful strategies σ and k are calibrated offline in one pass and held
+constant; `as_online` seeds from that calibration and then re-estimates them online.
+The micro-price is fitted from a one-pass Markov chain over the LOB. Run them on the
+full data and reproduce the report with:
 
 ```bash
-make experiments     # -> reports/{fixed,as,microprice_as}.csv
+make experiments     # -> reports/{fixed,as,microprice_as,as_online}.csv
 make sweep           # risk-aversion (gamma) sweep -> reports/gamma_sweep.csv
 ```
+
+`as_online` is the right strategy to evaluate as a market maker (controlled book);
+`as`/`microprice_as` are the literal paper implementations. See
+[docs/STRATEGY.md](docs/STRATEGY.md) for the performance comparison.
 
 See **[docs/STRATEGY.md](docs/STRATEGY.md)** for the models, calibration,
 performance tables, and roadmap. Pre-made configs: `configs/{fixed,as,microprice_as}.json`.

@@ -23,7 +23,7 @@ echo "strategy,gamma,fills,inventory,turnover,fees,equity_pnl" >"$OUT"
 
 val() { grep "^$1," "$2" | cut -d, -f2; }
 
-for strat in as microprice_as; do
+for strat in as microprice_as as_online; do
   for g in $GAMMAS; do
     cfg="$TMP/$strat-$g.json"
     rep="$TMP/$strat-$g.csv"

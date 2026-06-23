@@ -31,6 +31,9 @@ Config Config::load(const std::string& path) {
   c.as_sigma = j.value("as_sigma", c.as_sigma);
   c.as_k = j.value("as_k", c.as_k);
   c.as_horizon_s = j.value("as_horizon_s", c.as_horizon_s);
+  c.as_vol_alpha = j.value("as_vol_alpha", c.as_vol_alpha);
+  c.as_k_alpha = j.value("as_k_alpha", c.as_k_alpha);
+  c.as_min_half_spread = j.value("as_min_half_spread", c.as_min_half_spread);
   c.mp_imbalance_bins = j.value("mp_imbalance_bins", c.mp_imbalance_bins);
   c.mp_spread_bins = j.value("mp_spread_bins", c.mp_spread_bins);
   c.mp_sample_dt_us = j.value("mp_sample_dt_us", c.mp_sample_dt_us);

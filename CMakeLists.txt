@@ -45,6 +45,7 @@ add_library(bt STATIC
   src/bt/exec/execution_simulator.cpp
   src/bt/strategy/fixed_spread_quoter.cpp
   src/bt/strategy/avellaneda_stoikov.cpp
+  src/bt/strategy/avellaneda_stoikov_online.cpp
   src/bt/strategy/microprice.cpp
   src/bt/metrics/pnl_tracker.cpp
   src/bt/engine/backtest_engine.cpp

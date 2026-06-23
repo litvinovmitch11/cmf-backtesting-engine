@@ -62,6 +62,21 @@ int main(int argc, char** argv) {
     std::unique_ptr<bt::Strategy> strat;
     if (cfg.strategy == "as") {
       strat = std::make_unique<bt::AvellanedaStoikov>(as_params());
+    } else if (cfg.strategy == "as_online") {
+      // Online variant: rolling horizon + online sigma/k, seeded from the same
+      // offline calibration so the quotes are sane from the first event.
+      const bt::AvellanedaStoikovParams seed = as_params();
+      strat = std::make_unique<bt::AvellanedaStoikovOnline>(bt::ASOnlineParams{
+          .gamma = cfg.as_gamma,
+          .horizon_us = static_cast<bt::Ts>(cfg.as_horizon_s * 1e6),
+          .order_qty = cfg.order_qty,
+          .max_inventory = cfg.max_inventory,
+          .min_half_spread = cfg.as_min_half_spread,
+          .vol_alpha = cfg.as_vol_alpha,
+          .k_alpha = cfg.as_k_alpha,
+          .seed_sigma = seed.sigma,
+          .seed_k = seed.k,
+      });
     } else if (cfg.strategy == "microprice_as") {
       const bt::AvellanedaStoikovParams p = as_params();
       // One-shot calibration pass over the LOB to fit the Stoikov micro-price.

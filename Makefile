@@ -32,6 +32,7 @@ experiments: build ## Run fixed / A-S / micro-price-A-S on the full data (-> rep
 	$(BUILD)/backtest configs/fixed.json
 	$(BUILD)/backtest configs/as.json
 	$(BUILD)/backtest configs/microprice_as.json
+	$(BUILD)/backtest configs/as_online.json
 
 sweep: build ## Run the gamma risk-aversion sweep on the full data (-> reports/gamma_sweep.csv)
 	BUILD=$(BUILD) ./scripts/gamma_sweep.sh

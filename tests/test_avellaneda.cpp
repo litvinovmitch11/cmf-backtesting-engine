@@ -1,6 +1,7 @@
 #include "bt/book/order_book.hpp"
 #include "bt/data/event_source.hpp"
 #include "bt/strategy/avellaneda_stoikov.hpp"
+#include "bt/strategy/avellaneda_stoikov_online.hpp"
 #include "bt/strategy/microprice.hpp"
 #include "bt/strategy/microprice_as.hpp"
 
@@ -244,6 +245,105 @@ TEST_CASE("Avellaneda-Stoikov horizon is single-shot: skew vanishes after T", "[
   // degeneration that the (relaxed) rolling horizon existed to avoid.
   as.on_book(book, 5'000'000, api); // t = 5s >> T = 1s
   REQUIRE(as.last_reservation() == Catch::Approx(book.mid()));
+}
+
+TEST_CASE("AvellanedaStoikovOnline rolling horizon keeps the inventory skew alive past T",
+          "[strategy][as_online]") {
+  // The faithful A-S lets (T - t) clamp to 0 after T, so the skew dies. The
+  // online variant takes (T - t) modulo T, so at t = 2T the skew is back at full
+  // strength -- the reservation still leans away from a long position.
+  bt::ASOnlineParams p;
+  p.gamma = 0.5;
+  p.horizon_us = 1'000'000; // T = 1s
+  p.order_qty = 100;
+  p.max_inventory = 1e9; // no cap interference here
+  p.seed_sigma = 1e-3;
+  p.seed_k = 5.0;
+  bt::AvellanedaStoikovOnline as(p);
+
+  // Two different mids so the online volatility estimate is positive.
+  const bt::BookLevel bids0[1] = {{1'000'000, 500}};
+  const bt::BookLevel asks0[1] = {{1'000'010, 500}};
+  const bt::BookLevel bids1[1] = {{1'000'010, 500}};
+  const bt::BookLevel asks1[1] = {{1'000'020, 500}};
+  bt::OrderBook book0 = make_book(bids0, asks0);
+  bt::OrderBook book1 = make_book(bids1, asks1);
+  RecordingApi api;
+
+  as.on_book(book0, 0, api); // starts session clock at t=0
+  as.on_fill(bt::Fill{.ts = 1,
+                      .order_id = api.last_place(Side::Buy)->id,
+                      .side = Side::Buy,
+                      .price = api.last_place(Side::Buy)->px,
+                      .qty = 100,
+                      .maker = true});
+  REQUIRE(as.inventory() == 100.0);
+
+  // t = 2s = 2T: a single-shot horizon would give (T - t) = 0 (no skew); the
+  // rolling horizon resets, so the reservation is still pulled below the mid.
+  as.on_book(book1, 2'000'000, api);
+  REQUIRE(as.current_sigma() > 0.0);              // online sigma is live
+  REQUIRE(as.last_reservation() < book1.mid());   // skew survived past T
+}
+
+TEST_CASE("AvellanedaStoikovOnline stops quoting the side that breaches the inventory cap",
+          "[strategy][as_online]") {
+  bt::ASOnlineParams p;
+  p.gamma = 0.5;
+  p.horizon_us = 1'000'000;
+  p.order_qty = 100;
+  p.max_inventory = 100; // one lot
+  p.seed_sigma = 1e-3;
+  p.seed_k = 5.0;
+  bt::AvellanedaStoikovOnline as(p);
+
+  const bt::BookLevel bids[1] = {{1'000'000, 500}};
+  const bt::BookLevel asks[1] = {{1'000'010, 500}};
+  bt::OrderBook book = make_book(bids, asks);
+  RecordingApi api;
+
+  as.on_book(book, 0, api);
+  as.on_fill(bt::Fill{.ts = 1,
+                      .order_id = api.last_place(Side::Buy)->id,
+                      .side = Side::Buy,
+                      .price = api.last_place(Side::Buy)->px,
+                      .qty = 100,
+                      .maker = true});
+  REQUIRE(as.inventory() == 100.0); // at the cap
+
+  const std::size_t before = api.calls.size();
+  as.on_book(book, 100, api); // re-quote at the cap
+  // No new BUY order may be placed (would breach the cap); the ask is still quoted.
+  bool new_buy = false;
+  for (std::size_t i = before; i < api.calls.size(); ++i)
+    if (api.calls[i].kind == ApiCall::Kind::Place && api.calls[i].side == Side::Buy)
+      new_buy = true;
+  REQUIRE_FALSE(new_buy);
+  REQUIRE(api.last_place(Side::Sell) != nullptr);
+}
+
+TEST_CASE("AvellanedaStoikovOnline re-estimates k online from trade prints",
+          "[strategy][as_online][calibration]") {
+  bt::ASOnlineParams p;
+  p.gamma = 0.5;
+  p.horizon_us = 1'000'000;
+  p.order_qty = 100;
+  p.seed_k = 1.0;     // seed mean distance = 1.0 price -> k = 1.0
+  p.k_alpha = 1e-2;
+  bt::AvellanedaStoikovOnline as(p);
+
+  const bt::BookLevel bids[1] = {{1'000'000, 500}};
+  const bt::BookLevel asks[1] = {{1'000'010, 500}}; // mid = 0.1000005
+  bt::OrderBook book = make_book(bids, asks);
+  RecordingApi api;
+
+  REQUIRE(as.current_k() == Catch::Approx(1.0)); // seed
+  // Feed trades much closer to the mid than the seed distance -> mean distance
+  // shrinks -> k = 1/mean grows above the seed.
+  for (int i = 0; i < 5000; ++i)
+    as.on_trade(bt::TradePrint{.ts = 1, .aggressor = Side::Buy, .price = 1'000'006, .amount = 1},
+                book, 1, api);
+  REQUIRE(as.current_k() > 1.0);
 }
 
 TEST_CASE("MicropriceModel learns imbalance predicts the next mid move", "[strategy][microprice]") {

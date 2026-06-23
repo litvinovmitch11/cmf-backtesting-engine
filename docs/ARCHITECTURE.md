@@ -151,6 +151,11 @@ The three strategies and their calibration are documented in
 - **Micro-price (2018)** *(done)* — `MicropriceAS : AvellanedaStoikov` centres the quotes
   on the full Stoikov micro-price `M + g(I,S)`, where `g` is fitted from a finite-state
   Markov chain over the LOB (`MicropriceModel`, one-pass calibration).
+- **Online A-S** *(done)* — `AvellanedaStoikovOnline`, the deployable variant: same closed
+  form, but a **rolling horizon** (θ resets each session), **online σ/k** EWMAs
+  (`online_estimators.hpp`, seeded from the offline calibration), and an **inventory
+  cap + min-spread floor**. Holds inventory near flat across the full replay where the
+  faithful single-horizon version drifts. `strategy: "as_online"`.
 
 ## Roadmap
 

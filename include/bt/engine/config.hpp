@@ -30,7 +30,13 @@ struct Config {
   double as_gamma{0.5};      // risk aversion gamma
   double as_sigma{0.0};      // constant vol (price/sqrt-s); <=0 => calibrate offline
   double as_k{0.0};          // constant arrival decay (1/price); <=0 => calibrate offline
-  double as_horizon_s{60.0}; // finite horizon T (seconds), single-shot from the first event
+  double as_horizon_s{60.0}; // finite horizon T (seconds): single-shot for "as", rolling for "as_online"
+
+  // Online A-S extra knobs (used by "as_online"): sigma/k are re-estimated online
+  // with these EWMA weights and seeded from the offline calibration.
+  double as_vol_alpha{1e-3};       // EWMA weight for the online volatility estimator
+  double as_k_alpha{1e-3};         // EWMA weight for the online arrival-rate estimator
+  Ticks as_min_half_spread{1};     // floor on the half-spread, in ticks
 
   // Microprice calibration (used by "microprice_as").
   int mp_imbalance_bins{10};
