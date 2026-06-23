@@ -81,10 +81,10 @@ int main(int argc, char** argv) {
       const bt::AvellanedaStoikovParams p = as_params();
       // One-shot calibration pass over the LOB to fit the Stoikov micro-price.
       bt::LobBinSource cal_lob(cfg.lob_bin);
-      bt::MicropriceModel model = bt::MicropriceModel::calibrate(
-          cal_lob, {.n_imbalance = cfg.mp_imbalance_bins,
-                    .n_spread = cfg.mp_spread_bins,
-                    .sample_dt_us = cfg.mp_sample_dt_us});
+      bt::MicropriceModel model =
+          bt::MicropriceModel::calibrate(cal_lob, {.n_imbalance = cfg.mp_imbalance_bins,
+                                                   .n_spread = cfg.mp_spread_bins,
+                                                   .sample_dt_us = cfg.mp_sample_dt_us});
       std::fprintf(stderr, "microprice: calibrated on %zu transitions\n", model.samples());
       strat = std::make_unique<bt::MicropriceAS>(p, std::move(model));
     } else {
@@ -94,7 +94,18 @@ int main(int argc, char** argv) {
 
     bt::PnLTracker metrics(cfg.fee_bps);
 
-    bt::BacktestEngine engine(feed, book, exec, *strat, metrics);
+    // Optional per-row time-series for plotting. Fan the engine's single metrics
+    // sink out to the tracker (source of truth, added first) and the recorder.
+    bt::MetricsFanout sink;
+    sink.add(metrics);
+    std::unique_ptr<bt::TimeSeriesRecorder> recorder;
+    if (!cfg.series_csv.empty()) {
+      recorder = std::make_unique<bt::TimeSeriesRecorder>(
+          metrics, cfg.series_csv, static_cast<bt::Ts>(cfg.series_interval_ms) * 1000);
+      sink.add(*recorder);
+    }
+
+    bt::BacktestEngine engine(feed, book, exec, *strat, sink);
 
     const auto t0 = std::chrono::steady_clock::now();
     const bt::EngineStats st = engine.run();
@@ -126,6 +137,9 @@ int main(int argc, char** argv) {
                 r.turnover, r.fees, r.equity, secs,
                 static_cast<double>(st.events) / 1e6 / (secs > 0.0 ? secs : 1.0),
                 cfg.report_csv.c_str());
+
+    if (recorder)
+      std::fprintf(stderr, "series: %zu rows -> %s\n", recorder->rows(), cfg.series_csv.c_str());
   } catch (const std::exception& e) {
     std::fprintf(stderr, "backtest: error: %s\n", e.what());
     return 1;

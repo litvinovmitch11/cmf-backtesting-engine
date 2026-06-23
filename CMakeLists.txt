@@ -48,6 +48,7 @@ add_library(bt STATIC
   src/bt/strategy/avellaneda_stoikov_online.cpp
   src/bt/strategy/microprice.cpp
   src/bt/metrics/pnl_tracker.cpp
+  src/bt/metrics/time_series_recorder.cpp
   src/bt/engine/backtest_engine.cpp
   src/bt/engine/config.cpp)
 target_include_directories(bt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -71,7 +72,7 @@ target_link_libraries(backtest PRIVATE bt)
 enable_testing()
 add_executable(bt_tests tests/test_core.cpp tests/test_data.cpp tests/test_book.cpp
                         tests/test_exec.cpp tests/test_strategy.cpp tests/test_engine.cpp
-                        tests/test_avellaneda.cpp)
+                        tests/test_avellaneda.cpp tests/test_metrics.cpp)
 target_link_libraries(bt_tests PRIVATE bt Catch2::Catch2WithMain)
 
 include(CTest)

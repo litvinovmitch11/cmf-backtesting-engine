@@ -18,6 +18,8 @@ Config Config::load(const std::string& path) {
   c.lob_bin = j.value("lob_bin", c.lob_bin);
   c.trades_bin = j.value("trades_bin", c.trades_bin);
   c.report_csv = j.value("report_csv", c.report_csv);
+  c.series_csv = j.value("series_csv", c.series_csv);
+  c.series_interval_ms = j.value("series_interval_ms", c.series_interval_ms);
   c.fee_bps = j.value("fee_bps", c.fee_bps);
   c.feed_latency_us = j.value("feed_latency_us", c.feed_latency_us);
   c.order_latency_us = j.value("order_latency_us", c.order_latency_us);

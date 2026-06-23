@@ -75,6 +75,8 @@ use `configs/default.json`.
 |--|--|
 | `lob_bin` / `trades_bin` | converted input paths |
 | `report_csv` | summary output path |
+| `series_csv` | per-row time-series for plotting (price/PnL/inventory/volume); empty ⇒ off |
+| `series_interval_ms` | market-time sampling step for the series |
 | `fee_bps` | fee charged on each fill's notional |
 | `order_latency_us` | delay before a placed order joins the book |
 | `feed_latency_us` | reserved (roadmap) |
@@ -113,6 +115,45 @@ make sweep           # risk-aversion (gamma) sweep -> reports/gamma_sweep.csv
 See **[docs/STRATEGY.md](docs/STRATEGY.md)** for the models, calibration,
 performance tables, and roadmap. Pre-made configs: `configs/{fixed,as,microprice_as}.json`.
 
+## Plots
+
+When `series_csv` is set, the engine records a per-row time series
+(`ts,mid,inventory,equity,realized_cash,turnover,fees,fills,bucket_qty,bucket_fills`)
+sampled every `series_interval_ms` of market time — written by `bt::TimeSeriesRecorder`
+alongside the summary. C++ stays fast and deterministic; a small **poetry** project in
+[`viz/`](viz/) paints it with pandas + matplotlib:
+
+```bash
+make viz-install   # one-time: cd viz && poetry install
+make plot          # backtest the sample and render reports/series_sample.png
+```
+
+`make plot` draws four stacked panels — **price** (mid), **PnL** (equity + realized cash),
+**inventory**, and **volume** (per-sample strategy fills + cumulative turnover).
+
+### One plot per strategy
+
+`make experiments` writes a `reports/series_<strategy>.csv` for each of `fixed`, `as`,
+`microprice_as`, and `as_online`. Render them all to `reports/series_<strategy>.png`:
+
+```bash
+make experiments    # backtest every strategy -> reports/series_*.csv
+make plots          # render reports/series_<strategy>.png for each (needs viz-install)
+```
+
+A full run is ~half a million samples; `bt-viz` buckets the series down to ~3000 points
+(`--max-points`) so each figure stays fast and legible. Render any single run directly,
+optionally overlaying raw market volume, or live-watch the CSV:
+
+```bash
+cd viz
+poetry run bt-viz ../reports/series_as_online.csv -o run.png --show
+poetry run bt-viz ../reports/series_as_online.csv --trades ../market_data/trades.csv
+poetry run bt-viz ../reports/series_as_online.csv --watch   # re-render on every change
+```
+
+See [`viz/README.md`](viz/README.md) for details.
+
 ## Project layout
 
 ```
@@ -121,6 +162,7 @@ src/bt/**                                                   definitions
 apps/{convert_csv,backtest}.cpp                             executables
 tests/                                                      Catch2 tests
 configs/default.json                                        sample config
+viz/                                                        poetry plotting project (bt-viz)
 docs/ARCHITECTURE.md                                        design, market model, roadmap
 CMakeLists.txt, CMakePresets.json, Makefile                 build
 ```

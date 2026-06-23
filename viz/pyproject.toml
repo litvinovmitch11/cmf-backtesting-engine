@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "bt-viz"
+version = "0.1.0"
+description = "Plots for the cmf backtesting engine: price, PnL, inventory and volume from the engine's time-series CSV."
+authors = ["Michael Litvinov <litvinovmitchsp@gmail.com>"]
+readme = "README.md"
+packages = [{ include = "bt_viz" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pandas = "^2.2"
+matplotlib = "^3.8"
+watchdog = "^4.0"
+
+[tool.poetry.scripts]
+bt-viz = "bt_viz.cli:main"
+
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"

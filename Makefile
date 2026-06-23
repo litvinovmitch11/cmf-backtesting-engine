@@ -7,7 +7,7 @@ CONFIG ?= configs/default.json
 SOURCES := $(shell find include src apps tests -type f \( -name '*.hpp' -o -name '*.cpp' \))
 TU      := $(shell find src apps -type f -name '*.cpp')
 
-.PHONY: all configure build test run convert sample experiments sweep format tidy tidy-fix clean help
+.PHONY: all configure build test run convert sample experiments sweep viz-install plot plots format tidy tidy-fix clean help
 
 all: build
 
@@ -41,6 +41,17 @@ sample: build ## Convert the bundled sample data and backtest it (no large data 
 	$(BUILD)/convert_csv lob    market_data/lob_sample.csv    market_data/lob_sample.bin
 	$(BUILD)/convert_csv trades market_data/trades_sample.csv market_data/trades_sample.bin
 	$(BUILD)/backtest configs/sample.json
+
+viz-install: ## Install the Python plotting project (viz/, via poetry)
+	cd viz && poetry install
+
+plot: sample ## Backtest the sample and render price/PnL/inventory/volume plots (needs viz-install)
+	cd viz && poetry run bt-viz ../reports/series_sample.csv
+
+plots: ## Render reports/series_<strategy>.png for every series CSV (run experiments first)
+	@files=$$(ls reports/series_*.csv 2>/dev/null); \
+	if [ -z "$$files" ]; then echo "no reports/series_*.csv — run 'make experiments' first"; exit 1; fi; \
+	for f in $$files; do echo "plotting $$f"; (cd viz && poetry run bt-viz "../$$f"); done
 
 format: ## Apply clang-format to all sources
 	clang-format-21 -i $(SOURCES)

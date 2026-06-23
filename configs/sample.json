@@ -2,6 +2,8 @@
   "lob_bin": "market_data/lob_sample.bin",
   "trades_bin": "market_data/trades_sample.bin",
   "report_csv": "report.csv",
+  "series_csv": "reports/series_sample.csv",
+  "series_interval_ms": 1000,
 
   "fee_bps": 1.0,
   "feed_latency_us": 0,

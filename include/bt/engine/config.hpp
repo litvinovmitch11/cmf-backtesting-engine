@@ -13,6 +13,11 @@ struct Config {
   std::string trades_bin{"market_data/trades.bin"};
   std::string report_csv{"report.csv"};
 
+  // Per-row time-series for plotting (price/PnL/inventory/volume). Empty path
+  // disables it; series_interval_ms is the market-time sampling step.
+  std::string series_csv;
+  Ts series_interval_ms{1000};
+
   double fee_bps{0.0};
   Ts feed_latency_us{0}; // reserved (engine applies order latency; feed latency is roadmap)
   Ts order_latency_us{0};
@@ -27,16 +32,17 @@ struct Config {
   std::string strategy{"fixed"};
 
   // Avellaneda-Stoikov parameters (used by "as" / "microprice_as").
-  double as_gamma{0.5};      // risk aversion gamma
-  double as_sigma{0.0};      // constant vol (price/sqrt-s); <=0 => calibrate offline
-  double as_k{0.0};          // constant arrival decay (1/price); <=0 => calibrate offline
-  double as_horizon_s{60.0}; // finite horizon T (seconds): single-shot for "as", rolling for "as_online"
+  double as_gamma{0.5}; // risk aversion gamma
+  double as_sigma{0.0}; // constant vol (price/sqrt-s); <=0 => calibrate offline
+  double as_k{0.0};     // constant arrival decay (1/price); <=0 => calibrate offline
+  double as_horizon_s{
+      60.0}; // finite horizon T (seconds): single-shot for "as", rolling for "as_online"
 
   // Online A-S extra knobs (used by "as_online"): sigma/k are re-estimated online
   // with these EWMA weights and seeded from the offline calibration.
-  double as_vol_alpha{1e-3};       // EWMA weight for the online volatility estimator
-  double as_k_alpha{1e-3};         // EWMA weight for the online arrival-rate estimator
-  Ticks as_min_half_spread{1};     // floor on the half-spread, in ticks
+  double as_vol_alpha{1e-3};   // EWMA weight for the online volatility estimator
+  double as_k_alpha{1e-3};     // EWMA weight for the online arrival-rate estimator
+  Ticks as_min_half_spread{1}; // floor on the half-spread, in ticks
 
   // Microprice calibration (used by "microprice_as").
   int mp_imbalance_bins{10};

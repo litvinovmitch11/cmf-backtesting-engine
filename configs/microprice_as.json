@@ -2,6 +2,8 @@
   "lob_bin": "market_data/lob.bin",
   "trades_bin": "market_data/trades.bin",
   "report_csv": "reports/microprice_as.csv",
+  "series_csv": "reports/series_microprice_as.csv",
+  "series_interval_ms": 1000,
 
   "fee_bps": 1.0,
   "feed_latency_us": 0,
