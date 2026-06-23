@@ -6,5 +6,6 @@
 #include "bt/strategy/fixed_spread_quoter.hpp"
 #include "bt/strategy/microprice.hpp"
 #include "bt/strategy/microprice_as.hpp"
+#include "bt/strategy/microprice_as_online.hpp"
 #include "bt/strategy/order_api.hpp"
 #include "bt/strategy/strategy.hpp"

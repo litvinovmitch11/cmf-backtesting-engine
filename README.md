@@ -6,14 +6,15 @@ placement/cancellation with **queue-position-aware** execution, and reports PnL,
 and turnover.
 
 > **Status: strategies implemented.** Data pipeline, order book, queue-aware execution
-> simulator, PnL/inventory/turnover metrics, and four strategies — a constant-spread
+> simulator, PnL/inventory/turnover metrics, and five strategies — a constant-spread
 > quoter (pipeline stand-in), the paper-faithful **Avellaneda–Stoikov (2008)** and
-> **A-S + the Stoikov (2018) micro-price**, and a deployable **online A-S** (rolling
-> horizon + online σ/k + inventory cap) that holds inventory near flat — all
-> unit-tested (32 tests) and validated end-to-end on the sample data (~23M events
-> replay in <1 s). For the faithful strategies σ and k are calibrated offline in a
-> single pass and held constant; the online variant re-estimates them continuously;
-> the micro-price is fitted from a finite-state Markov chain. See
+> **A-S + the Stoikov (2018) micro-price**, a deployable **online A-S** (rolling
+> horizon + online σ/k + inventory cap) that holds inventory near flat, and their
+> combination **micro-price + online A-S** (the best performer) — all unit-tested
+> (34 tests) and validated end-to-end on the sample data (~23M events replay in <1 s).
+> For the faithful strategies σ and k are calibrated offline in a single pass and held
+> constant; the online variants re-estimate them continuously; the micro-price is
+> fitted from a finite-state Markov chain. See
 > **[docs/STRATEGY.md](docs/STRATEGY.md)** for the model descriptions, performance
 > results, and improvement roadmap.
 
@@ -54,8 +55,13 @@ make run                      # backtest with configs/default.json
 `make run` writes a summary to `report.csv` and prints, e.g.:
 
 ```
-events=22901679 book=1036690 trades=21864989 fills=764349 | inv=-88008 turnover=5.43e6 fees=543 equity_pnl=-1525.9 | 0.92s (24.84M ev/s) -> report.csv
+events=22901679 ... fills=764349 | inv=-88008 turnover=5.43e6 fees=543 equity_pnl=-1525.9 | max_dd=1532 ret/dd=-1.00 maker=100.0% inv_max=100999 | 0.92s -> report.csv
 ```
+
+The `report.csv` carries the raw figures (`equity_pnl`, `inventory`, `turnover`, `fees`)
+plus a risk-adjusted summary from `RiskMetrics`: `max_drawdown`, `return_over_maxdd`
+(Calmar-style PnL ÷ drawdown), `maker_fill_share`, and the inventory distribution
+(`inv_mean` / `inv_std` / `inv_max_abs`).
 
 ### Bundled sample (no large data needed)
 
@@ -84,7 +90,7 @@ use `configs/default.json`.
 | `order_qty` | size per quote |
 | `max_inventory` | hard position cap |
 | `queue_model` | `optimistic` or `proportional` |
-| `strategy` | `fixed` (stand-in), `as` (faithful A-S), `microprice_as` (A-S + micro-price), or `as_online` (deployable A-S) |
+| `strategy` | `fixed`, `as` (faithful A-S), `microprice_as` (A-S + micro-price), `as_online` (deployable A-S), or `microprice_as_online` (best: micro-price + online A-S) |
 | `as_gamma` | risk aversion (tune per instrument — see [STRATEGY.md](docs/STRATEGY.md#1-avellanedastoikov-2008)) |
 | `as_horizon_s` | horizon `T` (seconds): single-shot for `as`/`microprice_as`, rolling session for `as_online` |
 | `as_sigma` / `as_k` | pin volatility / arrival-decay instead of calibrating offline (≤0 ⇒ calibrate offline) |
@@ -94,26 +100,28 @@ use `configs/default.json`.
 
 ## Strategies
 
-Four strategies plug into one `Strategy` interface (selected via `strategy`):
+Five strategies plug into one `Strategy` interface (selected via `strategy`):
 `fixed` (constant-spread stand-in), `as` (paper-faithful Avellaneda–Stoikov 2008),
-`microprice_as` (A-S centred on the Stoikov 2018 micro-price), and `as_online` (the
+`microprice_as` (A-S centred on the Stoikov 2018 micro-price), `as_online` (the
 deployable A-S: rolling horizon + online σ/k + inventory cap, holding inventory near
-flat). For the faithful strategies σ and k are calibrated offline in one pass and held
-constant; `as_online` seeds from that calibration and then re-estimates them online.
-The micro-price is fitted from a one-pass Markov chain over the LOB. Run them on the
-full data and reproduce the report with:
+flat), and `microprice_as_online` (the online controls *with* the micro-price centre —
+the best performer). For the faithful strategies σ and k are calibrated offline in one
+pass and held constant; the online variants seed from that calibration and then
+re-estimate online. The micro-price is fitted from a one-pass Markov chain over the LOB.
+Run them on the full data and reproduce the report with:
 
 ```bash
-make experiments     # -> reports/{fixed,as,microprice_as,as_online}.csv
+make experiments     # -> reports/{fixed,as,microprice_as,as_online,microprice_as_online}.csv
 make sweep           # risk-aversion (gamma) sweep -> reports/gamma_sweep.csv
 ```
 
-`as_online` is the right strategy to evaluate as a market maker (controlled book);
-`as`/`microprice_as` are the literal paper implementations. See
-[docs/STRATEGY.md](docs/STRATEGY.md) for the performance comparison.
+`microprice_as_online` is the recommended strategy (controlled book + drift
+anticipation); `as`/`microprice_as` are the literal paper implementations. See
+[docs/STRATEGY.md](docs/STRATEGY.md) for the full performance comparison.
 
 See **[docs/STRATEGY.md](docs/STRATEGY.md)** for the models, calibration,
-performance tables, and roadmap. Pre-made configs: `configs/{fixed,as,microprice_as}.json`.
+performance tables, and roadmap. Pre-made configs:
+`configs/{fixed,as,microprice_as,as_online,microprice_as_online}.json`.
 
 ## Plots
 
@@ -134,7 +142,8 @@ make plot          # backtest the sample and render reports/series_sample.png
 ### One plot per strategy
 
 `make experiments` writes a `reports/series_<strategy>.csv` for each of `fixed`, `as`,
-`microprice_as`, and `as_online`. Render them all to `reports/series_<strategy>.png`:
+`microprice_as`, `as_online`, and `microprice_as_online`. Render them all to
+`reports/series_<strategy>.png`:
 
 ```bash
 make experiments    # backtest every strategy -> reports/series_*.csv

@@ -49,6 +49,7 @@ add_library(bt STATIC
   src/bt/strategy/microprice.cpp
   src/bt/metrics/pnl_tracker.cpp
   src/bt/metrics/time_series_recorder.cpp
+  src/bt/metrics/risk_metrics.cpp
   src/bt/engine/backtest_engine.cpp
   src/bt/engine/config.cpp)
 target_include_directories(bt PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

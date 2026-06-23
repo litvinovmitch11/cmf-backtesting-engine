@@ -19,12 +19,16 @@ double AvellanedaStoikovOnline::current_k() const noexcept {
   return arr_.ready() ? arr_.k() : p_.seed_k;
 }
 
+double AvellanedaStoikovOnline::center_price(const OrderBook& book) const {
+  return book.mid();
+}
+
 void AvellanedaStoikovOnline::on_book(const OrderBook& book, Ts now, OrderApi& api) {
   if (!book.valid())
     return;
 
   const double mid = book.mid();
-  vol_.update(mid, now); // online sigma refresh
+  vol_.update(mid, now); // online sigma refresh (always on the true mid)
 
   if (!started_) {
     t0_ = now;
@@ -39,10 +43,11 @@ void AvellanedaStoikovOnline::on_book(const OrderBook& book, Ts now, OrderApi& a
   // Online sigma^2 (seeded until the EWMA is ready) and k.
   const double sigma2 = vol_.ready() ? vol_.sigma2_per_sec() : (p_.seed_sigma * p_.seed_sigma);
   const double k = current_k();
-  const double q = inventory_ / p_.order_qty; // signed inventory in lots
+  const double q = inventory_ / p_.order_qty;  // signed inventory in lots
+  const double center = center_price(book);    // mid (or micro-price in the override)
 
   // Reservation price (eq. 3.8) and optimal half-spread (eqs. 3.10-3.12).
-  const double reservation = mid - (q * p_.gamma * sigma2 * tau);
+  const double reservation = center - (q * p_.gamma * sigma2 * tau);
   double half = 0.5 * p_.gamma * sigma2 * tau;
   if (k > 0.0 && p_.gamma > 0.0)
     half += (1.0 / p_.gamma) * std::log1p(p_.gamma / k);

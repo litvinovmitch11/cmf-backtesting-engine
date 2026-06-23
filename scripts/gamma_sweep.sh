@@ -19,11 +19,11 @@ trap 'rm -rf "$TMP"' EXIT
 [ -x "$BT" ] || { echo "build first: cmake --build --preset release" >&2; exit 1; }
 
 mkdir -p "$(dirname "$OUT")"
-echo "strategy,gamma,fills,inventory,turnover,fees,equity_pnl" >"$OUT"
+echo "strategy,gamma,fills,inventory,turnover,fees,equity_pnl,max_drawdown,return_over_maxdd,inv_max_abs" >"$OUT"
 
 val() { grep "^$1," "$2" | cut -d, -f2; }
 
-for strat in as microprice_as as_online; do
+for strat in as microprice_as as_online microprice_as_online; do
   for g in $GAMMAS; do
     cfg="$TMP/$strat-$g.json"
     rep="$TMP/$strat-$g.csv"
@@ -33,10 +33,12 @@ for strat in as microprice_as as_online; do
     # Capture fills from stdout; the rest from the report CSV.
     line="$("$BT" "$cfg" 2>/dev/null)"
     fills="$(sed -E 's/.*fills=([0-9]+).*/\1/' <<<"$line")"
-    printf '%s,%s,%s,%s,%s,%s,%s\n' \
+    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
       "$strat" "$g" "$fills" \
       "$(val inventory "$rep")" "$(val turnover "$rep")" \
-      "$(val fees "$rep")" "$(val equity_pnl "$rep")" >>"$OUT"
+      "$(val fees "$rep")" "$(val equity_pnl "$rep")" \
+      "$(val max_drawdown "$rep")" "$(val return_over_maxdd "$rep")" \
+      "$(val inv_max_abs "$rep")" >>"$OUT"
     echo "  $strat gamma=$g -> $line" >&2
   done
 done

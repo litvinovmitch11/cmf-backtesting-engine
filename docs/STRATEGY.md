@@ -2,14 +2,16 @@
 
 This document describes the market-making strategies implemented on top of the
 backtesting engine — the paper-faithful **Avellaneda–Stoikov (§1)** and **micro-price
-A-S (§2)**, plus a deployable **online A-S (§3)** that holds inventory near flat — how
-their parameters are calibrated from the data, the performance results on the sample
-dataset, and an improvement roadmap.
+A-S (§2)**, the deployable **online A-S (§3)** that holds inventory near flat, and their
+combination **micro-price + online A-S (§4)**, which is the best performer — how their
+parameters are calibrated from the data, the performance results on the sample dataset,
+and an improvement roadmap.
 
 - **Source:** [`avellaneda_stoikov.{hpp,cpp}`](../include/bt/strategy/avellaneda_stoikov.hpp),
   [`microprice.{hpp,cpp}`](../include/bt/strategy/microprice.hpp),
   [`microprice_as.hpp`](../include/bt/strategy/microprice_as.hpp),
-  [`avellaneda_stoikov_online.{hpp,cpp}`](../include/bt/strategy/avellaneda_stoikov_online.hpp).
+  [`avellaneda_stoikov_online.{hpp,cpp}`](../include/bt/strategy/avellaneda_stoikov_online.hpp),
+  [`microprice_as_online.hpp`](../include/bt/strategy/microprice_as_online.hpp).
 - **Papers:** Avellaneda & Stoikov (2008), *High-frequency trading in a limit order
   book*; Stoikov (2018), *The Micro-Price* — both in [`docs/papers/`](papers/).
 
@@ -142,12 +144,45 @@ deployable — a **normal market maker that holds inventory near flat**:
 Config: `strategy: "as_online"` with `as_gamma`, `as_horizon_s` (rolling session),
 `max_inventory`, `as_vol_alpha`, `as_k_alpha`, `as_min_half_spread`
 ([`configs/as_online.json`](../configs/as_online.json)). Everything else is the §1
-closed form. This is the recommended strategy when the goal is a controlled book
-rather than paper fidelity.
+closed form. This is the recommended *plain* online strategy; the combined variant
+in §4 dominates it on PnL.
 
 ---
 
-## 4. Performance results
+## 4. Micro-price + online A-S (the best variant)
+
+`MicropriceASOnline`
+([`microprice_as_online.hpp`](../include/bt/strategy/microprice_as_online.hpp)) is the
+combination of the two ideas that each fall short alone:
+
+- The **faithful micro-price A-S (§2)** anticipates imbalance-driven drift, but lets
+  inventory run to ~910k (single horizon, no cap).
+- The **online A-S (§3)** holds inventory near flat, but quotes around the plain mid,
+  so it ignores the short-horizon drift the micro-price predicts.
+
+`MicropriceASOnline` inherits *all* of §3's controls — rolling horizon, online σ/k,
+inventory cap, min-spread floor — and overrides only the quote **centre**, replacing
+the mid with the Stoikov micro-price `M + g(I,S)` (the same one-pass Markov calibration
+as §2). In code it is a one-method override of `AvellanedaStoikovOnline`:
+
+```cpp
+double center_price(const OrderBook& book) const override {     // mid -> mid + g(I,S)
+  double imb = qb / (qb + qa);
+  return book.mid() + model_.adjustment(imb, book.spread());
+}
+```
+
+So the reservation price is `r = (M + g(I,S)) − q·γ·σ²·(T−t)` with the rolling `(T−t)`:
+a **controlled book *and* drift anticipation** at once. Config:
+`strategy: "microprice_as_online"` ([`configs/microprice_as_online.json`](../configs/microprice_as_online.json)),
+taking both the `as_*` online knobs and the `mp_*` micro-price knobs.
+
+**It is the recommended strategy:** on the sweep below it beats plain online A-S on PnL
+at every `γ ≥ 10` while keeping inventory just as flat.
+
+---
+
+## 5. Performance results
 
 Full sample dataset: **22,901,679 events** (1,036,690 book updates, 21,864,989
 trades) over ~6 days. `fee_bps = 1.0`, `order_latency_us = 1000`,
@@ -160,12 +195,20 @@ Calibrated constants (offline, full data): `σ ≈ 2.88e-6`, `k ≈ 3.99e5`.
 
 ### Headline (γ = 500)
 
-| Strategy | Fills | End inventory | Turnover | Fees | Equity PnL |
-|--|--:|--:|--:|--:|--:|
-| Fixed-spread (baseline) | 764,349 | −88,008 | 5.43M | 543.3 | **−1525.9** |
-| Avellaneda–Stoikov (faithful) | 173,921 | 478,255 | 1.28M | 127.8 | **+1486.0** |
-| Micro-price + A-S (faithful) | 173,841 | 909,931 | 1.27M | 127.4 | **+1194.4** |
-| A-S online (§3) | 260,181 | **−3,262** | 1.95M | 195.2 | **−396.4** |
+| Strategy | Fills | End inv | Turnover | Equity PnL | Max DD | Ret/DD | Max\|inv\| |
+|--|--:|--:|--:|--:|--:|--:|--:|
+| Fixed-spread (baseline) | 764,349 | −88,008 | 5.43M | **−1525.9** | 1532.5 | −1.00 | 100,999 |
+| Avellaneda–Stoikov (faithful, §1) | 173,921 | 478,255 | 1.28M | **+1486.0** | 399.6 | +3.72 | 666,960 |
+| Micro-price + A-S (faithful, §2) | 173,841 | 909,931 | 1.27M | **+1194.4** | 1007.2 | +1.19 | 1,045,400 |
+| A-S online (§3) | 260,181 | −3,262 | 1.95M | **−396.4** | 396.5 | −1.00 | 21,337 |
+| **Micro-price + online A-S (§4)** | 248,813 | **−5,594** | 1.88M | **−368.0** | **368.1** | −1.00 | 24,832 |
+
+*Max DD* = worst peak-to-trough of the equity curve (PnL units); *Ret/DD* = equity PnL ÷
+max drawdown (a Calmar-style risk-adjusted return); *Max|inv|* = largest absolute inventory
+reached. These come from `RiskMetrics` and are written into every `report.csv` (with
+`maker_fill_share`, `inv_mean`, `inv_std`). A **Sharpe** ratio was evaluated but dropped:
+the flat-start price-taker overlay has a near-deterministic equity path, so an annualized
+Sharpe explodes at any sampling interval — return/drawdown is the meaningful figure here.
 
 - **A-S (faithful) vs fixed:** the volatility-aware spread quotes far less (173.9k vs
   764.3k fills, turnover and fees cut to ~¼) and PnL is positive on this rising tape.
@@ -176,52 +219,72 @@ Calibrated constants (offline, full data): `σ ≈ 2.88e-6`, `k ≈ 3.99e5`.
   +910k for micro-price-A-S, which leans further into the trend). The high "PnL" is
   largely that drifted long position marked against a rising tape — a directional
   bet, not market-making edge.
-- **A-S online (§3) is the one to read as a market maker.** The rolling horizon and
-  cap hold inventory at **−3,262** (≈3 lots of 1,000) instead of letting it run, so
-  the **−396.4** PnL is the honest cost of providing liquidity on this optimistic
-  price-taker overlay — comparable spread/fills profile to a real maker. Same engine,
-  same calibration; only the three §3 relaxations differ.
+- **The two online variants are the ones to read as market makers.** The rolling
+  horizon and cap hold inventory near flat (−3.3k / −5.6k of a 100k cap), so their PnL
+  is the honest cost of providing liquidity on this optimistic price-taker overlay.
+- **Adding the micro-price helps once inventory is controlled.** §4 improves on §3 by
+  **~7%** at γ = 500 (−368.0 vs −396.4) with a near-identical fills/turnover profile —
+  the better short-horizon mid predictor reduces how often we are filled just before
+  the mid moves against us. (This edge was invisible in the *faithful* MP-AS, where the
+  uncontrolled drift dominated everything.)
+- **Risk metrics confirm the picture.** *Max|inv|* exposes what the end-inventory hides:
+  the faithful runs swing through 0.67M–1.0M units, the controlled makers stay ≤25k (of a
+  100k cap). The faithful *Ret/DD* looks great (+3.72) only because a one-directional
+  position on a rising tape has a small drawdown relative to its gain — it is the
+  directional bet again, not maker edge. Among the genuine makers, §4 has the smallest
+  drawdown (368 vs 396).
 
 ### Risk-aversion (γ) sweep — `reports/gamma_sweep.csv` (`make sweep`)
 
-| γ | A-S inv | A-S PnL | MP-AS inv | MP-AS PnL | online inv | online PnL |
-|--:|--:|--:|--:|--:|--:|--:|
-| 1 | 486,617 | +1458.5 | 918,840 | +1165.1 | 30,525 | −328.6 |
-| 10 | 483,617 | +1468.4 | 912,840 | +1184.9 | −3,878 | −397.3 |
-| 50 | 481,114 | +1476.6 | 910,840 | +1191.5 | −3,427 | −435.9 |
-| 100 | 480,141 | +1479.8 | 908,777 | +1198.3 | −2,240 | −435.9 |
-| 500 | 478,255 | +1486.0 | 909,931 | +1194.4 | −3,262 | −396.4 |
-| 2000 | 480,550 | **+1919.2** | 898,325 | +1330.6 | **−126** | **−285.2** |
+Faithful §1/§2 — `γ` barely moves inventory (single-horizon signature: the skew is
+zero outside the first `T` seconds, so every row sits at the same drifted position):
 
-For the **faithful** A-S/MP-AS, `γ` has **almost no effect on ending inventory** — the
-single-horizon signature: outside the first `T` seconds the skew is zero regardless of
-`γ`, so all rows sit at roughly the same drifted position. For the **online** variant
-`γ` is a *real* inventory control: ending inventory tightens from 30.5k (`γ = 1`) to
-near-flat (`−126` at `γ = 2000`), reproducing the paper's qualitative "higher γ ⇒
-tighter book", and `γ ≈ 2000` is both flattest and least-negative PnL here.
+| γ | A-S inv | A-S PnL | MP-AS inv | MP-AS PnL |
+|--:|--:|--:|--:|--:|
+| 1 | 486,617 | +1458.5 | 918,840 | +1165.1 |
+| 100 | 480,141 | +1479.8 | 908,777 | +1198.3 |
+| 500 | 478,255 | +1486.0 | 909,931 | +1194.4 |
+| 2000 | 480,550 | +1919.2 | 898,325 | +1330.6 |
+
+Online §3/§4 — `γ` is a *real* inventory control (tightens from ~30k at γ=1 to flat at
+γ=2000), reproducing the paper's "higher γ ⇒ tighter book". **§4 (micro-price) beats §3
+on PnL at every γ ≥ 10:**
+
+| γ | A-S online inv | A-S online PnL | MP online inv | MP online PnL |
+|--:|--:|--:|--:|--:|
+| 1 | 30,525 | −328.6 | 26,613 | −340.0 |
+| 10 | −3,878 | −397.3 | 8,496 | −368.4 |
+| 50 | −3,427 | −435.9 | −701 | −411.2 |
+| 100 | −2,240 | −435.9 | −3,925 | −409.1 |
+| 500 | −3,262 | −396.4 | −5,594 | −368.0 |
+| 2000 | −126 | −285.2 | −973 | **−261.6** |
+
+The PnL-optimal, near-flat operating point overall is **§4 at γ ≈ 2000** (PnL −261.6,
+inventory −973): the most risk-averse skew leaves the least exposure to the trend, and
+the micro-price centre extracts the remaining short-horizon edge.
 
 ---
 
-## 5. Improvement roadmap
+## 6. Improvement roadmap
 
 **Strategy**
 - **Full finite-horizon `θ`-PDE** (paper §3.1) in place of the symmetric proxy
   `r = s − qγσ²(T−t)`, giving asymmetric `δ^a ≠ δ^b` directly. (Inventory control
-  across the full replay is already addressed by the §3 online variant's rolling
-  horizon; the PDE is the more principled, model-internal alternative.)
-- **A micro-price + online A-S combination** — the §3 rolling/online controls plus
-  the §2 micro-price centre, to get a controlled book *and* the drift anticipation.
+  across the full replay is already addressed by the §3/§4 online rolling horizon;
+  the PDE is the more principled, model-internal alternative.)
 - **Multi-level / sized quoting** and an Avellaneda–Stoikov–Cartea inventory
   penalty; size as a function of edge and imbalance.
-- **Joint γ/σ/k auto-tuning** (e.g. walk-forward) and per-instrument γ
-  normalisation by tick/price scale so the default is sane without a sweep.
+- **γ auto-tuning** (e.g. walk-forward) and per-instrument γ normalisation by
+  tick/price scale so the default is sane without a sweep. (σ and k are already
+  estimated online in the `*_online` variants.)
 - **Micro-price:** richer state (Level-2 depth, recent trade-flow), online/rolling
   re-fit instead of a single calibration pass, and a horizon-aware blend.
 
 **Evaluation**
-- **Risk-adjusted metrics:** equity-curve time series → Sharpe, max drawdown,
-  fill ratio, inventory distribution, per-session PnL (the engine already marks
-  to mid on every event; needs a time-series export from `Metrics`).
+- **Risk-adjusted metrics** *(done)* — `RiskMetrics` writes max drawdown,
+  return/drawdown, maker fill share and the inventory distribution into every
+  `report.csv` and the γ-sweep; `TimeSeriesRecorder` + `viz/` plot the equity/
+  inventory curves. *Remaining:* per-session / rolling-window PnL breakdown.
 - **Adverse-selection diagnostics:** mark fills at +Δt to quantify how often we
   are run over, and confirm the micro-price reduces it.
 

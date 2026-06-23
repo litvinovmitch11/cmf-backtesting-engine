@@ -156,12 +156,24 @@ The three strategies and their calibration are documented in
   (`online_estimators.hpp`, seeded from the offline calibration), and an **inventory
   cap + min-spread floor**. Holds inventory near flat across the full replay where the
   faithful single-horizon version drifts. `strategy: "as_online"`.
+- **Micro-price + online A-S** *(done, best)* — `MicropriceASOnline : AvellanedaStoikovOnline`
+  overrides only the quote centre with the Stoikov micro-price `M + g(I,S)`, keeping all
+  the online controls. A controlled book *and* drift anticipation; beats plain online A-S
+  on PnL at every sensible γ. `strategy: "microprice_as_online"`.
 
 ## Roadmap
 
-- **Performance report** — equity curve, drawdown, Sharpe, fill ratio, inventory
-  distribution (time-series export from `Metrics`).
+- **Performance report** *(done)* — per-row time-series export (`TimeSeriesRecorder`,
+  plotted by `viz/`) plus a risk-adjusted summary (`RiskMetrics`: max drawdown,
+  return/drawdown, maker fill share, inventory distribution) in every `report.csv`.
+  *Remaining:* per-session / rolling-window PnL breakdown and trade-level
+  adverse-selection diagnostics (mark fills at +Δt). A Sharpe ratio was evaluated
+  and deliberately dropped — on a flat-start price-taker overlay the equity path is
+  near-deterministic, so an annualized Sharpe explodes; return/drawdown is the
+  meaningful risk-adjusted figure (see `risk_metrics.hpp`).
 - **Strategy** — full finite-horizon `θ`-PDE (asymmetric δ), multi-level/sized quoting,
-  joint γ/σ/k auto-tuning, richer micro-price state with online re-fit.
-- **Execution refinements** — feed latency, cancel latency, multi-level queue accounting,
-  adverse-selection / market-impact models, fee tiers.
+  **γ** auto-tuning / walk-forward (σ and k are already estimated online in the
+  `*_online` variants), richer micro-price state with online re-fit.
+- **Execution refinements** — feed latency (config field reserved, not yet applied),
+  cancel latency, multi-level queue accounting, adverse-selection / market-impact
+  models, fee tiers.

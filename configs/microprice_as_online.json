@@ -1,0 +1,26 @@
+{
+  "lob_bin": "market_data/lob.bin",
+  "trades_bin": "market_data/trades.bin",
+  "report_csv": "reports/microprice_as_online.csv",
+  "series_csv": "reports/series_microprice_as_online.csv",
+  "series_interval_ms": 1000,
+
+  "fee_bps": 1.0,
+  "feed_latency_us": 0,
+  "order_latency_us": 1000,
+
+  "order_qty": 1000,
+  "max_inventory": 100000,
+  "queue_model": "optimistic",
+
+  "strategy": "microprice_as_online",
+  "as_gamma": 500,
+  "as_horizon_s": 300.0,
+  "as_vol_alpha": 1e-3,
+  "as_k_alpha": 1e-3,
+  "as_min_half_spread": 1,
+
+  "mp_imbalance_bins": 10,
+  "mp_spread_bins": 4,
+  "mp_sample_dt_us": 1000000
+}

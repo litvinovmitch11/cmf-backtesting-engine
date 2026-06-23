@@ -55,6 +55,53 @@ bt::Fill mk_fill(bt::Ts ts, Side side, bt::Qty qty) {
 
 } // namespace
 
+TEST_CASE("RiskMetrics computes drawdown, return/drawdown, and inventory distribution",
+          "[metrics][risk]") {
+  bt::PnLTracker pnl(0.0);
+  bt::RiskMetrics risk(pnl, /*interval_us=*/10);
+
+  // Buy 100 @ price 1.0 (ticks 1e7): cash = -100, inventory = 100.
+  const bt::Fill buy{
+      .ts = 0, .order_id = 1, .side = Side::Buy, .price = 10'000'000, .qty = 100.0, .maker = true};
+  pnl.on_fill(buy);
+  risk.on_fill(buy);
+
+  // Equity = cash + inventory*mid = -100 + 100*mid. Drive an up/down/up curve.
+  auto mark = [&](bt::Ts ts, double mid) {
+    pnl.on_mark(ts, mid);
+    risk.on_mark(ts, mid); // samples each ts (interval = 10, marks 10 apart)
+  };
+  mark(0, 1.00);  // equity 0   (opening sample, peak = 0)
+  mark(10, 1.10); // equity 10  (new peak)
+  mark(20, 1.05); // equity 5   (drawdown 10 - 5 = 5)
+  mark(30, 1.20); // equity 20  (new peak)
+  risk.finalize();
+
+  const bt::RiskReport r = risk.report();
+  CHECK(r.max_drawdown == Catch::Approx(5.0));        // worst peak-to-trough (10 -> 5)
+  CHECK(r.return_over_maxdd == Catch::Approx(4.0));   // final equity 20 / drawdown 5
+  CHECK(r.inv_mean == Catch::Approx(100.0));          // inventory held flat at 100
+  CHECK(r.inv_std == Catch::Approx(0.0).margin(1e-9));
+  CHECK(r.inv_max_abs == Catch::Approx(100.0));
+}
+
+TEST_CASE("RiskMetrics reports the maker (passive) fill share", "[metrics][risk]") {
+  bt::PnLTracker pnl(0.0);
+  bt::RiskMetrics risk(pnl, 10);
+  const auto f = [](bool maker) {
+    return bt::Fill{.ts = 0, .order_id = 1, .side = Side::Buy, .price = 10'000'000, .qty = 1.0,
+                    .maker = maker};
+  };
+  risk.on_fill(f(true));
+  risk.on_fill(f(true));
+  risk.on_fill(f(true));
+  risk.on_fill(f(false)); // one marketable (taker) fill
+  const bt::RiskReport r = risk.report();
+  CHECK(r.maker_fills == 3);
+  CHECK(r.taker_fills == 1);
+  CHECK(r.maker_fill_share == Catch::Approx(0.75));
+}
+
 TEST_CASE("TimeSeriesRecorder samples on the market-time grid and sums bucket volume",
           "[metrics]") {
   const std::filesystem::path path = std::filesystem::temp_directory_path() / "bt_series_test.csv";

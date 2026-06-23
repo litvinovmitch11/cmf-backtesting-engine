@@ -1,0 +1,17 @@
+metric,value
+events,22901679
+book_updates,1036690
+trades,21864989
+fills,248813
+inventory,-5594
+turnover,1.87698e+06
+fees,187.698
+realized_cash,-324.724
+mark_price,0.00773575
+equity_pnl,-367.998
+max_drawdown,368.066
+return_over_maxdd,-0.999815
+maker_fill_share,0.945401
+inv_mean,-10.5268
+inv_std,1796.69
+inv_max_abs,24832

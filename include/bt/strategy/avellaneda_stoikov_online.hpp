@@ -44,7 +44,9 @@ struct ASOnlineParams {
 // Reservation price and half-spread are otherwise the same closed form as the
 // paper (eqs. 3.8, 3.10-3.12):
 //   r = mid - q*gamma*sigma^2*(T-t),  d = 1/2 gamma sigma^2 (T-t) + 1/gamma ln(1+gamma/k).
-class AvellanedaStoikovOnline final : public Strategy {
+// `center` is the mid (this class) or the micro-price (MicropriceASOnline, which
+// overrides center_price) — exactly mirroring AvellanedaStoikov / MicropriceAS.
+class AvellanedaStoikovOnline : public Strategy {
 public:
   explicit AvellanedaStoikovOnline(ASOnlineParams params)
       : p_(params), vol_(params.vol_alpha),
@@ -59,6 +61,10 @@ public:
   [[nodiscard]] double last_half_spread() const noexcept { return last_half_spread_; }
   [[nodiscard]] double current_sigma() const noexcept;
   [[nodiscard]] double current_k() const noexcept;
+
+protected:
+  // The price the quotes are centered on. Mid here; micro-price in the override.
+  [[nodiscard]] virtual double center_price(const OrderBook& book) const;
 
 private:
   ASOnlineParams p_;

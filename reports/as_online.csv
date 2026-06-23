@@ -9,3 +9,9 @@ fees,195.244
 realized_cash,-371.171
 mark_price,0.00773575
 equity_pnl,-396.405
+max_drawdown,396.45
+return_over_maxdd,-0.999886
+maker_fill_share,0.971896
+inv_mean,-5.18501
+inv_std,1919.88
+inv_max_abs,21337

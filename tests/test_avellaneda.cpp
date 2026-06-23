@@ -4,6 +4,7 @@
 #include "bt/strategy/avellaneda_stoikov_online.hpp"
 #include "bt/strategy/microprice.hpp"
 #include "bt/strategy/microprice_as.hpp"
+#include "bt/strategy/microprice_as_online.hpp"
 
 #include <array>
 #include <catch2/catch_approx.hpp>
@@ -346,6 +347,43 @@ TEST_CASE("AvellanedaStoikovOnline re-estimates k online from trade prints",
     as.on_trade(bt::TradePrint{.ts = 1, .aggressor = Side::Buy, .price = 1'000'006, .amount = 1},
                 book, 1, api);
   REQUIRE(as.current_k() > 1.0);
+}
+
+TEST_CASE("MicropriceASOnline centers on the micro-price while keeping online controls",
+          "[strategy][as_online][microprice]") {
+  // Build a model with a known positive adjustment for a heavy-bid 1-tick state.
+  bt::MicropriceModel model({.n_imbalance = 3, .n_spread = 1});
+  for (int i = 0; i < 1000; ++i) {
+    model.add_transition(0.9, 1, 0.5, 1, 1e-6, true);
+    model.add_transition(0.1, 1, 0.5, 1, -1e-6, true);
+    model.add_transition(0.5, 1, 0.5, 1, 0.0, false);
+  }
+  model.fit();
+  const double adj = model.adjustment(0.9, 1);
+  REQUIRE(adj > 0.0);
+
+  bt::ASOnlineParams p;
+  p.gamma = 0.5;
+  p.horizon_us = 1'000'000;
+  p.order_qty = 100;
+  p.max_inventory = 1e9;
+  p.seed_sigma = 1e-3;
+  p.seed_k = 5.0;
+
+  const bt::BookLevel bids[1] = {{1'000'000, 900}};
+  const bt::BookLevel asks[1] = {{1'000'001, 100}}; // 1-tick spread, imbalance 0.9
+  bt::OrderBook book = make_book(bids, asks);
+
+  bt::AvellanedaStoikovOnline plain(p);
+  bt::MicropriceASOnline mp(p, std::move(model));
+  RecordingApi api;
+  plain.on_book(book, 0, api);
+  mp.on_book(book, 0, api);
+
+  // At zero inventory the reservation equals the centre: mid for plain, mid + g
+  // for the micro-price online variant.
+  REQUIRE(plain.last_reservation() == Catch::Approx(book.mid()));
+  REQUIRE(mp.last_reservation() == Catch::Approx(book.mid() + adj));
 }
 
 TEST_CASE("MicropriceModel learns imbalance predicts the next mid move", "[strategy][microprice]") {
