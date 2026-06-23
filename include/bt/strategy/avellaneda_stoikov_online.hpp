@@ -10,17 +10,17 @@ namespace bt {
 // Parameters for the *online* Avellaneda-Stoikov market maker (the practical,
 // inventory-controlled variant — see AvellanedaStoikovOnline below).
 struct ASOnlineParams {
-  double gamma{0.5};            // risk aversion gamma
-  Ts horizon_us{300'000'000};  // rolling session length T (theta resets each T)
-  Qty order_qty{1.0};          // size per quote ("one unit")
-  Qty max_inventory{100'000};  // safety cap: stop quoting the side that grows it
-  Ticks min_half_spread{1};    // floor on the half-spread, in ticks
+  double gamma{0.5};          // risk aversion gamma
+  Ts horizon_us{300'000'000}; // rolling session length T (theta resets each T)
+  Qty order_qty{1.0};         // size per quote ("one unit")
+  Qty max_inventory{100'000}; // safety cap: stop quoting the side that grows it
+  Ticks min_half_spread{1};   // floor on the half-spread, in ticks
 
   // Online-estimator settings.
-  double vol_alpha{1e-3};      // EWMA weight for the volatility estimator
-  double k_alpha{1e-3};        // EWMA weight for the arrival-rate estimator
-  double seed_sigma{0.0};      // initial sigma (price/sqrt-s) until vol warms up
-  double seed_k{1.0};          // initial k (1/price) until trades arrive
+  double vol_alpha{1e-3}; // EWMA weight for the volatility estimator
+  double k_alpha{1e-3};   // EWMA weight for the arrival-rate estimator
+  double seed_sigma{0.0}; // initial sigma (price/sqrt-s) until vol warms up
+  double seed_k{1.0};     // initial k (1/price) until trades arrive
 };
 
 // Avellaneda-Stoikov (2008) with ONLINE parameter rebalancing — a deployable

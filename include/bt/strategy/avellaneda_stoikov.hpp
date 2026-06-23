@@ -62,7 +62,8 @@ public:
 
   void on_book(const OrderBook& book, Ts now, OrderApi& api) override;
   // k is constant, so there is nothing to learn from a trade print.
-  void on_trade(const TradePrint&, const OrderBook&, Ts, OrderApi&) override {}
+  void on_trade(const TradePrint& /*trade*/, const OrderBook& /*book*/, Ts /*now*/,
+                OrderApi& /*api*/) override {}
   void on_fill(const Fill& fill) override;
 
   [[nodiscard]] Qty inventory() const noexcept { return inventory_; }
@@ -73,9 +74,8 @@ protected:
   // The price the quotes are centered on. Mid here; micro-price in MicropriceAS.
   [[nodiscard]] virtual double center_price(const OrderBook& book) const;
 
-  AvellanedaStoikovParams p_;
-
 private:
+  AvellanedaStoikovParams p_;
   Qty inventory_{0};
   Ts t0_{0};
   bool started_{false};

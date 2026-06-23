@@ -7,6 +7,7 @@ market_data/*.bin
 report.csv
 
 # Generated plotting artifacts and Python caches (viz/poetry.lock IS committed).
-reports/series*.csv
+venv
 __pycache__/
 *.pyc
+reports/series*.csv

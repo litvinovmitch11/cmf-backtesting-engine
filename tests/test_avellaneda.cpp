@@ -61,7 +61,8 @@ public:
     evs_.emplace_back(bu);
   }
   void push_trade(bt::Ticks px, bt::Qty amount, bt::Ts ts) {
-    evs_.emplace_back(bt::TradePrint{.ts = ts, .aggressor = Side::Buy, .price = px, .amount = amount});
+    evs_.emplace_back(
+        bt::TradePrint{.ts = ts, .aggressor = Side::Buy, .price = px, .amount = amount});
   }
   [[nodiscard]] bool has_next() const override { return i_ < evs_.size(); }
   [[nodiscard]] bt::Ts peek_ts() const override { return bt::timestamp_of(evs_[i_]); }
@@ -121,7 +122,8 @@ TEST_CASE("Avellaneda-Stoikov half-spread matches the closed form (eqs. 3.10-3.1
 
   as.on_book(book, 0, api);
   const double sigma2 = p.sigma * p.sigma;
-  const double expected = 0.5 * p.gamma * sigma2 * 1.0 + (1.0 / p.gamma) * std::log1p(p.gamma / p.k);
+  const double expected =
+      0.5 * p.gamma * sigma2 * 1.0 + (1.0 / p.gamma) * std::log1p(p.gamma / p.k);
   REQUIRE(as.last_half_spread() == Catch::Approx(expected));
   // ...and the reservation is exactly the mid at zero inventory (eq. 3.8, q=0).
   REQUIRE(as.last_reservation() == Catch::Approx(book.mid()));
@@ -142,8 +144,8 @@ TEST_CASE("Avellaneda-Stoikov::calibrate recovers sigma and k from the data",
   feed.push_trade(/*px*/ 999'975, 10, /*ts*/ 1'600'000);   // -4e-6
 
   const bt::ASConstants c = bt::AvellanedaStoikov::calibrate(feed);
-  REQUIRE(c.sigma == Catch::Approx(1e-6));        // sqrt(1e-12 / 1s)
-  REQUIRE(c.k == Catch::Approx(1.0 / 3e-6));      // 1 / mean distance
+  REQUIRE(c.sigma == Catch::Approx(1e-6));   // sqrt(1e-12 / 1s)
+  REQUIRE(c.k == Catch::Approx(1.0 / 3e-6)); // 1 / mean distance
 }
 
 TEST_CASE("MicropriceAS centers quotes on the micro-price (mid + g(I,S))",
@@ -282,8 +284,8 @@ TEST_CASE("AvellanedaStoikovOnline rolling horizon keeps the inventory skew aliv
   // t = 2s = 2T: a single-shot horizon would give (T - t) = 0 (no skew); the
   // rolling horizon resets, so the reservation is still pulled below the mid.
   as.on_book(book1, 2'000'000, api);
-  REQUIRE(as.current_sigma() > 0.0);              // online sigma is live
-  REQUIRE(as.last_reservation() < book1.mid());   // skew survived past T
+  REQUIRE(as.current_sigma() > 0.0);            // online sigma is live
+  REQUIRE(as.last_reservation() < book1.mid()); // skew survived past T
 }
 
 TEST_CASE("AvellanedaStoikovOnline stops quoting the side that breaches the inventory cap",
@@ -328,7 +330,7 @@ TEST_CASE("AvellanedaStoikovOnline re-estimates k online from trade prints",
   p.gamma = 0.5;
   p.horizon_us = 1'000'000;
   p.order_qty = 100;
-  p.seed_k = 1.0;     // seed mean distance = 1.0 price -> k = 1.0
+  p.seed_k = 1.0; // seed mean distance = 1.0 price -> k = 1.0
   p.k_alpha = 1e-2;
   bt::AvellanedaStoikovOnline as(p);
 
@@ -387,8 +389,8 @@ TEST_CASE("MicropriceModel::calibrate samples on the fixed grid", "[strategy][mi
     FakeLob lob;
     for (int i = 0; i < 11; ++i)
       lob.push(/*bid*/ 100 + i, 900, /*ask*/ 101 + i, 100, /*ts*/ static_cast<bt::Ts>(i));
-    return bt::MicropriceModel::calibrate(
-        lob, {.n_imbalance = 4, .n_spread = 4, .sample_dt_us = dt_us});
+    return bt::MicropriceModel::calibrate(lob,
+                                          {.n_imbalance = 4, .n_spread = 4, .sample_dt_us = dt_us});
   };
   // Event-time (dt=0): one transition per consecutive pair -> 10.
   REQUIRE(fit(0).samples() == 10);
@@ -402,7 +404,8 @@ TEST_CASE("MicropriceModel::calibrate drops spreads outside the modeled range",
           "[strategy][microprice]") {
   FakeLob lob;
   for (int i = 0; i < 11; ++i)
-    lob.push(/*bid*/ 100, 900, /*ask*/ 110, 100, /*ts*/ static_cast<bt::Ts>(i)); // spread = 10 ticks
+    lob.push(/*bid*/ 100, 900, /*ask*/ 110, 100,
+             /*ts*/ static_cast<bt::Ts>(i)); // spread = 10 ticks
   const bt::MicropriceModel m =
       bt::MicropriceModel::calibrate(lob, {.n_imbalance = 4, .n_spread = 4, .sample_dt_us = 0});
   REQUIRE(m.samples() == 0);             // every transition filtered out (spread 10 > 4)

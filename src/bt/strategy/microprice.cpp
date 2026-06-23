@@ -11,44 +11,58 @@
 namespace bt {
 namespace {
 
+// Row (>= col) with the largest |a[r][col]|, the partial-pivot choice.
+int pivot_row(const std::vector<double>& a, int n, int col) {
+  int piv = col;
+  double best = std::abs(a[(col * n) + col]);
+  for (int r = col + 1; r < n; ++r) {
+    const double v = std::abs(a[(r * n) + col]);
+    if (v > best) {
+      best = v;
+      piv = r;
+    }
+  }
+  return piv;
+}
+
+// Swap rows r1 and r2 across both the n-wide A and the rhs-wide B.
+void swap_rows(std::vector<double>& a, std::vector<double>& b, int n, int rhs, int r1, int r2) {
+  for (int c = 0; c < n; ++c)
+    std::swap(a[(r1 * n) + c], a[(r2 * n) + c]);
+  for (int c = 0; c < rhs; ++c)
+    std::swap(b[(r1 * rhs) + c], b[(r2 * rhs) + c]);
+}
+
+// Normalise the pivot row to a unit pivot, then eliminate `col` from every other
+// row (the Gauss-Jordan reduction step for one column).
+void reduce_column(std::vector<double>& a, std::vector<double>& b, int n, int rhs, int col) {
+  const double inv = 1.0 / a[(col * n) + col];
+  for (int c = 0; c < n; ++c)
+    a[(col * n) + c] *= inv;
+  for (int c = 0; c < rhs; ++c)
+    b[(col * rhs) + c] *= inv;
+  for (int r = 0; r < n; ++r) {
+    const double f = a[(r * n) + col];
+    if (r == col || f == 0.0)
+      continue;
+    for (int c = 0; c < n; ++c)
+      a[(r * n) + c] -= f * a[(col * n) + c];
+    for (int c = 0; c < rhs; ++c)
+      b[(r * rhs) + c] -= f * b[(col * rhs) + c];
+  }
+}
+
 // Solve A X = B in place for X (A: n x n, B: n x rhs), Gauss-Jordan with partial
 // pivoting. A and B are row-major; on return B holds the solution. Singular rows
 // (pivot ~ 0) are treated as identity so empty/never-visited states map to 0.
 void solve_in_place(std::vector<double>& a, std::vector<double>& b, int n, int rhs) {
   for (int col = 0; col < n; ++col) {
-    int piv = col;
-    double best = std::abs(a[col * n + col]);
-    for (int r = col + 1; r < n; ++r) {
-      const double v = std::abs(a[r * n + col]);
-      if (v > best) {
-        best = v;
-        piv = r;
-      }
-    }
-    if (best < 1e-12)
+    const int piv = pivot_row(a, n, col);
+    if (std::abs(a[(piv * n) + col]) < 1e-12)
       continue; // singular column -> leave as-is (identity-like)
-    if (piv != col) {
-      for (int c = 0; c < n; ++c)
-        std::swap(a[piv * n + c], a[col * n + c]);
-      for (int c = 0; c < rhs; ++c)
-        std::swap(b[piv * rhs + c], b[col * rhs + c]);
-    }
-    const double inv = 1.0 / a[col * n + col];
-    for (int c = 0; c < n; ++c)
-      a[col * n + c] *= inv;
-    for (int c = 0; c < rhs; ++c)
-      b[col * rhs + c] *= inv;
-    for (int r = 0; r < n; ++r) {
-      if (r == col)
-        continue;
-      const double f = a[r * n + col];
-      if (f == 0.0)
-        continue;
-      for (int c = 0; c < n; ++c)
-        a[r * n + c] -= f * a[col * n + c];
-      for (int c = 0; c < rhs; ++c)
-        b[r * rhs + c] -= f * b[col * rhs + c];
-    }
+    if (piv != col)
+      swap_rows(a, b, n, rhs, piv, col);
+    reduce_column(a, b, n, rhs, col);
   }
 }
 
@@ -68,7 +82,7 @@ int MicropriceModel::spread_bucket(Ticks spread) const noexcept {
 }
 
 int MicropriceModel::state(double imb, Ticks spread) const noexcept {
-  return spread_bucket(spread) * cfg_.n_imbalance + imbalance_bucket(imb);
+  return (spread_bucket(spread) * cfg_.n_imbalance) + imbalance_bucket(imb);
 }
 
 void MicropriceModel::accumulate(double imb, Ticks spread, double imb_next, Ticks spread_next,
@@ -77,10 +91,10 @@ void MicropriceModel::accumulate(double imb, Ticks spread, double imb_next, Tick
   const int y = state(imb_next, spread_next);
   n_state_[x] += 1.0;
   if (moved) {
-    t_count_[x * nm_ + y] += 1.0;
+    t_count_[(x * nm_) + y] += 1.0;
     r_sum_[x] += dM;
   } else {
-    q_count_[x * nm_ + y] += 1.0;
+    q_count_[(x * nm_) + y] += 1.0;
   }
 }
 
@@ -110,13 +124,13 @@ void MicropriceModel::fit() {
   std::vector<double> rvec(n, 0.0);
   for (int x = 0; x < n; ++x) {
     const double nx = n_state_[x];
-    imq[x * n + x] = 1.0;
+    imq[(x * n) + x] = 1.0;
     if (nx <= 0.0)
       continue;
     const double invn = 1.0 / nx;
     for (int y = 0; y < n; ++y) {
-      imq[x * n + y] -= q_count_[x * n + y] * invn; // I - Q
-      t[x * n + y] = t_count_[x * n + y] * invn;    // T
+      imq[(x * n) + y] -= q_count_[(x * n) + y] * invn; // I - Q
+      t[(x * n) + y] = t_count_[(x * n) + y] * invn;    // T
     }
     rvec[x] = r_sum_[x] * invn; // E[dM * 1(moved) | x]
   }
@@ -127,18 +141,18 @@ void MicropriceModel::fit() {
   std::vector<double> a = imq; // copied: solve_in_place destroys it
   std::vector<double> rhs_mat(static_cast<std::size_t>(n) * rhs, 0.0);
   for (int x = 0; x < n; ++x) {
-    rhs_mat[x * rhs + 0] = rvec[x];
+    rhs_mat[(x * rhs) + 0] = rvec[x];
     for (int y = 0; y < n; ++y)
-      rhs_mat[x * rhs + (1 + y)] = t[x * n + y];
+      rhs_mat[(x * rhs) + (1 + y)] = t[(x * n) + y];
   }
   solve_in_place(a, rhs_mat, n, rhs);
 
   std::vector<double> g1(n);
   std::vector<double> b(static_cast<std::size_t>(n) * n);
   for (int x = 0; x < n; ++x) {
-    g1[x] = rhs_mat[x * rhs + 0];
+    g1[x] = rhs_mat[(x * rhs) + 0];
     for (int y = 0; y < n; ++y)
-      b[x * n + y] = rhs_mat[x * rhs + (1 + y)];
+      b[(x * n) + y] = rhs_mat[(x * rhs) + (1 + y)];
   }
 
   // G* = sum_{i>=0} B^i G1, summed iteratively until the term is negligible.
@@ -150,7 +164,7 @@ void MicropriceModel::fit() {
     for (int x = 0; x < n; ++x) {
       double s = 0.0;
       for (int y = 0; y < n; ++y)
-        s += b[x * n + y] * term[y];
+        s += b[(x * n) + y] * term[y];
       next[x] = s;
       maxabs = std::max(maxabs, std::abs(s));
     }
@@ -190,6 +204,8 @@ MicropriceModel MicropriceModel::calibrate(EventSource& lob, Config cfg) {
     if (have_prev && in_range(spread) && in_range(prev_spread)) {
       const bool moved = (mid2 != prev_mid2);
       const double dM = to_price(mid2 - prev_mid2) * 0.5;
+      // prev_* is the "from" state, imb/spread the "to" state: not swapped.
+      // NOLINTNEXTLINE(readability-suspicious-call-argument)
       m.add_transition(prev_imb, prev_spread, imb, spread, dM, moved);
     }
     prev_imb = imb;

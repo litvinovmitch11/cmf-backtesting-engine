@@ -78,7 +78,7 @@ void AvellanedaStoikov::on_book(const OrderBook& book, Ts now, OrderApi& api) {
   const double q = inventory_ / p_.order_qty; // signed inventory in lots
 
   // Reservation price (paper eq. 3.8) and optimal symmetric half-spread (3.10-3.12).
-  const double reservation = center - q * p_.gamma * sigma2 * tau;
+  const double reservation = center - (q * p_.gamma * sigma2 * tau);
   double half = 0.5 * p_.gamma * sigma2 * tau;
   if (p_.k > 0.0 && p_.gamma > 0.0)
     half += (1.0 / p_.gamma) * std::log1p(p_.gamma / p_.k);
